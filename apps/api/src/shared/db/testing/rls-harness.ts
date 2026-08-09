@@ -1,3 +1,5 @@
+import '../pg-types';
+import { createHash } from 'node:crypto';
 import { Client, Pool } from 'pg';
 import { join } from 'node:path';
 import type { Role } from '@mir/contracts';
@@ -23,10 +25,35 @@ const HOST = process.env['TEST_PG_HOST'] ?? '127.0.0.1';
 const PORT = process.env['TEST_PG_PORT'] ?? '5433';
 const SUPERUSER = process.env['TEST_PG_SUPERUSER'] ?? 'postgres';
 const SUPERPASS = process.env['TEST_PG_SUPERPASS'] ?? 'postgres';
-const TEST_DB = process.env['TEST_PG_DATABASE'] ?? 'mir_test';
+/**
+ * One database PER VITEST WORKER.
+ *
+ * Test files run in parallel workers, and every DB suite truncates in
+ * beforeEach. Sharing a single database means suite A wipes suite B's fixtures
+ * mid-test, producing foreign-key and RLS failures that look like real
+ * authorization bugs and move around between runs.
+ *
+ * Isolating per worker keeps the parallelism (these suites are slow) while
+ * making each one deterministic. Files that share a worker run sequentially,
+ * so truncation between them is safe.
+ */
+const WORKER_ID = process.env['VITEST_WORKER_ID'] ?? '1';
+const TEST_DB = process.env['TEST_PG_DATABASE'] ?? `mir_test_${WORKER_ID}`;
 
 /** Local test-only credential. Never used outside the test database. */
 const APP_PASSWORD = process.env['TEST_PG_APP_PASSWORD'] ?? 'mir_app_test_pw';
+
+/**
+ * Baseline published consent terms (P5.3). Must match the hashing used by
+ * ConsentService — line endings normalised, nothing else.
+ */
+const BASELINE_TERMS = {
+  ar: 'أوافق على نقل صوري الطبية إلى الطبيب المستقبل في تونس.',
+  fr: "J'accepte le transfert de mes images médicales au médecin destinataire en Tunisie.",
+} as const;
+
+const sha256Hex = (text: string): string =>
+  createHash('sha256').update(text.replace(/\r\n/g, '\n'), 'utf8').digest('hex');
 
 export const ownerUrl = (db: string): string =>
   `postgres://${SUPERUSER}:${SUPERPASS}@${HOST}:${PORT}/${db}`;
@@ -68,6 +95,24 @@ export async function setupTestDatabase(): Promise<Harness> {
   // Terraform + Secrets Manager in deployed environments, here in tests.
   const owner = new Pool({ connectionString: ownerUrl(TEST_DB), max: 4 });
   await owner.query(`ALTER ROLE mir_app LOGIN PASSWORD '${APP_PASSWORD}'`);
+
+  // Baseline reference data: consent_records carries a foreign key to
+  // consent_terms (0003), so every suite that grants consent needs published
+  // terms to exist. Seeded here rather than per-suite so the suites stay
+  // independently runnable in any order.
+  await owner.query(
+    `INSERT INTO consent_terms (version, locale, scope, body, content_hash, published_at)
+     VALUES
+       ('v1', 'ar', 'cross_border_transfer', $1, $2, now()),
+       ('v1', 'fr', 'cross_border_transfer', $3, $4, now())
+     ON CONFLICT DO NOTHING`,
+    [
+      BASELINE_TERMS.ar,
+      sha256Hex(BASELINE_TERMS.ar),
+      BASELINE_TERMS.fr,
+      sha256Hex(BASELINE_TERMS.fr),
+    ],
+  );
 
   const app = new Pool({ connectionString: appUrl(TEST_DB), max: 4 });
 

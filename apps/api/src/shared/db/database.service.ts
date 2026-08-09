@@ -1,3 +1,4 @@
+import './pg-types';
 import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common';
 import { Pool, type PoolClient } from 'pg';
 import { APP_CONFIG } from '../config/config.module';
@@ -39,7 +40,19 @@ export class DatabaseService implements OnModuleDestroy {
     });
   }
 
+  private closed = false;
+
+  /**
+   * Idempotent shutdown.
+   *
+   * Nest can invoke lifecycle hooks more than once — a manual close alongside
+   * an application shutdown hook, for instance — and `Pool.end()` throws on the
+   * second call. A crash during shutdown obscures whatever caused the shutdown,
+   * which is exactly when the real error matters most.
+   */
   async onModuleDestroy(): Promise<void> {
+    if (this.closed) return;
+    this.closed = true;
     await this.pool.end();
   }
 

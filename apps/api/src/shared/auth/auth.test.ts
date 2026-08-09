@@ -151,14 +151,40 @@ describe('P4.2 API authentication', () => {
 
   it('2. tampered signature -> 401', async () => {
     const token = await mintToken();
-    // Flip the last character of the signature segment.
     const parts = token.split('.');
     const sig = parts[2] ?? '';
-    const tampered = `${parts[0]}.${parts[1]}.${sig.slice(0, -1)}${sig.endsWith('A') ? 'B' : 'A'}`;
 
+    // Alter a character in the MIDDLE of the signature, not the last one.
+    // base64url's final character can carry padding bits that decode to the
+    // same bytes, so flipping it sometimes leaves the signature unchanged and
+    // the request legitimately succeeds — a flaky test, not a security hole.
+    const chars = [...sig];
+    const i = Math.floor(chars.length / 2);
+    chars[i] = chars[i] === 'A' ? 'B' : 'A';
+    const tampered = `${parts[0]}.${parts[1]}.${chars.join('')}`;
+
+    expect(tampered).not.toBe(token);
     await request(app.getHttpServer())
       .get('/probe/patient-only')
       .set('authorization', `Bearer ${tampered}`)
+      .expect(401);
+  });
+
+  it('2b. tampered PAYLOAD (self-promotion to admin) -> 401', async () => {
+    // The attack the signature check actually exists to stop: take a valid
+    // patient token and rewrite the role claim.
+    const token = await mintToken({ roles: ['patient'] });
+    const [header, payload, sig] = token.split('.');
+
+    const decoded = JSON.parse(
+      Buffer.from(payload ?? '', 'base64url').toString('utf8'),
+    ) as Record<string, unknown>;
+    decoded['realm_access'] = { roles: ['admin'] };
+    const forged = Buffer.from(JSON.stringify(decoded), 'utf8').toString('base64url');
+
+    await request(app.getHttpServer())
+      .get('/probe/patient-only')
+      .set('authorization', `Bearer ${header}.${forged}.${sig}`)
       .expect(401);
   });
 

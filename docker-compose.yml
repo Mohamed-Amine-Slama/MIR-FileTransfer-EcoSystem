@@ -38,5 +38,24 @@ services:
       timeout: 3s
       retries: 30
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: mir-keycloak
+    # Local development only. In deployed environments Keycloak runs in a
+    # PRIVATE subnet with its own database, TLS enforced, and the admin console
+    # unreachable from the internet (BUILD_SPEC P4.1).
+    command: ['start-dev', '--import-realm']
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: 'true'
+    volumes:
+      - ./infra/keycloak/realm-mir.json:/opt/keycloak/data/import/realm-mir.json:ro
+    ports:
+      - '${KEYCLOAK_HOST_PORT:-8080}:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   mir-pgdata:

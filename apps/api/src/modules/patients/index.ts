@@ -1,12 +1,15 @@
 /**
  * Public API of the `patients` module (BUILD_SPEC §5.1).
  *
- * Everything another module is allowed to touch is re-exported here. Anything
- * under `internal/` is private and importing it from outside this directory
- * fails the build (P1.4).
- *
- * Cross-module calls go through this file or through domain events (§5.2).
- * There is no third option — in particular, no module may query another
- * module's tables directly.
+ * Other modules get the service and its types. They do NOT get the repository,
+ * the controller, or the claim-token internals — imaging must not be able to
+ * mint a claim credential, and nothing outside this module should ever query
+ * patients_patients directly (§5.1 rule 1).
  */
-export {};
+export { PatientsService } from './internal/patients.service';
+export type {
+  CreatePatientInput,
+  CreatePatientResult,
+} from './internal/patients.service';
+export type { PatientCandidate } from './internal/patient-matching';
+export { PatientsModule } from './patients.module';

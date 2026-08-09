@@ -1,0 +1,236 @@
+{
+  "_comment": [
+    "Keycloak realm for MIR — BUILD_SPEC P4.1, P4.3.",
+    "",
+    "Import with: kcadm.sh create realms -f realm-mir.json, or KC_IMPORT on first boot.",
+    "",
+    "WHAT THIS FILE DOES NOT CONTAIN, ON PURPOSE:",
+    "  * no client secrets — injected from AWS Secrets Manager at deploy time (BUILD_SPEC §6)",
+    "  * no users — created through the application, never seeded here",
+    "  * no admin credentials",
+    "",
+    "SELF-HOSTED (ADR / §4): self-hosting Keycloak keeps identity out of the",
+    "compliance chain. A hosted IdP would become a processor of authentication",
+    "data for patients in two jurisdictions whose rules (L1, L2) are unresolved."
+  ],
+
+  "realm": "mir",
+  "enabled": true,
+  "displayName": "MIR — Medical Imaging Referral",
+
+  "sslRequired": "all",
+
+  "registrationAllowed": false,
+  "registrationEmailAsUsername": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "loginWithEmailAllowed": false,
+  "duplicateEmailsAllowed": false,
+  "verifyEmail": false,
+
+  "_comment_identifiers": [
+    "Login is by phone number, not email. Libyan patients frequently have no",
+    "email address, and the phone number is the identifier the claim flow",
+    "(P5.2) and SMS OTP both key on."
+  ],
+
+  "_comment_tokens": [
+    "Short access tokens: a stolen token is useful only for its remaining",
+    "lifetime, and this system's tokens grant reach toward patient imaging.",
+    "Refresh is longer so a doctor mid-upload is not thrown out, but idle",
+    "sessions still expire within a working day."
+  ],
+  "accessTokenLifespan": 300,
+  "accessTokenLifespanForImplicitFlow": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 0,
+  "refreshTokenMaxReuse": 0,
+  "revokeRefreshToken": true,
+
+  "_comment_bruteforce": [
+    "Server-side brute-force protection, in addition to the application rate",
+    "limiter (P4.5). Two layers because they fail differently: Keycloak's",
+    "survives an application restart, the application's covers endpoints",
+    "Keycloak never sees."
+  ],
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "maxDeltaTimeSeconds": 43200,
+  "quickLoginCheckMilliSeconds": 1000,
+  "minimumQuickLoginWaitSeconds": 60,
+
+  "passwordPolicy": "length(12) and notUsername(undefined) and notEmail(undefined) and passwordHistory(5) and hashAlgorithm(pbkdf2-sha512) and hashIterations(210000)",
+
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA256",
+  "otpPolicyDigits": 6,
+  "otpPolicyPeriod": 30,
+  "otpPolicyLookAheadWindow": 1,
+
+  "roles": {
+    "realm": [
+      {
+        "name": "libya_doctor",
+        "description": "Referring doctor in Libya. Creates patient records, uploads studies. MFA required.",
+        "composite": false
+      },
+      {
+        "name": "tunisia_doctor",
+        "description": "Receiving doctor in Tunisia. Manages availability, reads consented studies. MFA required.",
+        "composite": false
+      },
+      {
+        "name": "patient",
+        "description": "Patient or client. Claims their record, grants consent, books appointments.",
+        "composite": false
+      },
+      {
+        "name": "admin",
+        "description": "Platform admin. Doctor verification and support. NO routine access to patient images (BUILD_SPEC §1.1). MFA required.",
+        "composite": false
+      }
+    ]
+  },
+
+  "_comment_default_roles": [
+    "No default role grants an application role. A new account has no role",
+    "until an admin assigns one, so a self-service registration bug cannot",
+    "mint a doctor. The API rejects any token carrying zero — or more than",
+    "one — application role."
+  ],
+  "defaultRole": {
+    "name": "default-roles-mir",
+    "composite": true,
+    "clientRole": false
+  },
+
+  "clients": [
+    {
+      "clientId": "mir-api",
+      "name": "MIR API (resource server)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "_comment": [
+        "bearerOnly: the API validates tokens and never initiates a login.",
+        "This client id is the AUDIENCE the API requires (P4.2). A token minted",
+        "for mir-web is signed by the same realm but is not for this API, and",
+        "must be rejected."
+      ]
+    },
+    {
+      "clientId": "mir-web",
+      "name": "MIR Web (Next.js)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      },
+      "_comment": [
+        "Public client with PKCE and no client secret — a secret shipped to a",
+        "browser is not a secret. Implicit flow is disabled: it puts tokens in",
+        "the URL, where they reach browser history and referrer headers.",
+        "Direct access grants are disabled so credentials never transit the",
+        "application at all."
+      ],
+      "redirectUris": ["https://app.example.invalid/*"],
+      "webOrigins": ["https://app.example.invalid"],
+      "protocolMappers": [
+        {
+          "name": "audience-mir-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "mir-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          },
+          "_comment": "Adds mir-api to aud so the API accepts tokens obtained by the web client."
+        },
+        {
+          "name": "realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+
+  "_comment_mfa": [
+    "P4.3: TOTP is REQUIRED for libya_doctor, tunisia_doctor and admin.",
+    "Patients may use SMS OTP instead.",
+    "",
+    "Keycloak cannot express 'required for these realm roles' declaratively in",
+    "a realm export — conditional MFA needs an authentication flow with a",
+    "role-condition executor, configured after import. The script in",
+    "infra/keycloak/configure-mfa.sh does that.",
+    "",
+    "The API does NOT rely on this being right: AuthGuard independently",
+    "rejects any clinical-role token that shows no second factor (amr/acr).",
+    "If the realm is misconfigured, doctors are locked out — which is the",
+    "correct direction to fail."
+  ],
+
+  "requiredActions": [
+    {
+      "alias": "CONFIGURE_TOTP",
+      "name": "Configure OTP",
+      "providerId": "CONFIGURE_TOTP",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 10
+    }
+  ],
+
+  "browserSecurityHeaders": {
+    "contentSecurityPolicy": "frame-src 'self'; frame-ancestors 'self'; object-src 'none';",
+    "xFrameOptions": "DENY",
+    "xContentTypeOptions": "nosniff",
+    "strictTransportSecurity": "max-age=31536000; includeSubDomains",
+    "referrerPolicy": "no-referrer"
+  },
+
+  "eventsEnabled": true,
+  "eventsExpiration": 7776000,
+  "enabledEventTypes": [
+    "LOGIN",
+    "LOGIN_ERROR",
+    "LOGOUT",
+    "CODE_TO_TOKEN",
+    "CODE_TO_TOKEN_ERROR",
+    "REFRESH_TOKEN",
+    "REFRESH_TOKEN_ERROR",
+    "UPDATE_PASSWORD",
+    "UPDATE_TOTP",
+    "REMOVE_TOTP",
+    "USER_DISABLED_BY_PERMANENT_LOCKOUT"
+  ],
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": true,
+  "_comment_events": [
+    "Authentication events are retained for 90 days and shipped to the same",
+    "place as the application audit log. A breach investigation needs to",
+    "correlate 'who logged in' with 'what they read' (P4.4), and those two",
+    "records live in different systems."
+  ]
+}
