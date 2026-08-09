@@ -1,0 +1,83 @@
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { APP_CONFIG } from '../../../shared/config/config.module';
+import type { AppConfig } from '../../../shared/config/config.schema';
+import type { OrthancClient } from './orthanc.client';
+
+/**
+ * HTTP client for Orthanc's DICOMweb API — BUILD_SPEC P8.1, P8.2.
+ *
+ * Credentials live here and ONLY here. They are never sent to the browser, and
+ * the bundle check (scripts/check-bundle-secrets.mjs) fails the build if they
+ * ever appear in client output.
+ *
+ * Every method is a server-to-server call inside the VPC. There is deliberately
+ * no method that returns an Orthanc URL for a client to fetch directly: doing
+ * so would create the bypass P8.2 exists to prevent, and the access would never
+ * reach the audit log.
+ */
+@Injectable()
+export class OrthancHttpClient implements OrthancClient {
+  private readonly logger = new Logger(OrthancHttpClient.name);
+
+  constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {}
+
+  private authHeader(): string {
+    const raw = `${this.config.ORTHANC_USERNAME}:${this.config.ORTHANC_PASSWORD}`;
+    return `Basic ${Buffer.from(raw, 'utf8').toString('base64')}`;
+  }
+
+  /** STOW-RS. Idempotent: Orthanc is configured with OverwriteInstances=false. */
+  async storeInstance(dicomBytes: Uint8Array): Promise<void> {
+    const res = await this.request('/instances', {
+      method: 'POST',
+      headers: { 'content-type': 'application/dicom' },
+      body: dicomBytes,
+    });
+
+    if (!res.ok) {
+      throw new Error(`Orthanc STOW failed: ${res.status}`);
+    }
+  }
+
+  /** QIDO-RS study lookup. Returns null when Orthanc does not have it. */
+  async findStudy(studyInstanceUid: string): Promise<unknown> {
+    const res = await this.request(
+      `/dicom-web/studies?StudyInstanceUID=${encodeURIComponent(studyInstanceUid)}`,
+      { method: 'GET', headers: { accept: 'application/dicom+json' } },
+    );
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Orthanc QIDO failed: ${res.status}`);
+    return res.json();
+  }
+
+  /**
+   * WADO-RS retrieve, streamed back to the proxy.
+   *
+   * Returns the raw Response so the controller can stream it to the caller
+   * without buffering a whole series in memory — a 120-slice CT held in a Node
+   * buffer per concurrent viewer is how the API runs out of heap.
+   */
+  async retrieve(path: string, accept: string): Promise<Response> {
+    return this.request(path, { method: 'GET', headers: { accept } });
+  }
+
+  private async request(path: string, init: RequestInit): Promise<Response> {
+    const url = `${this.config.ORTHANC_URL.replace(/\/$/, '')}${path}`;
+    try {
+      return await fetch(url, {
+        ...init,
+        headers: { ...(init.headers ?? {}), authorization: this.authHeader() },
+        // Orthanc is on the private network; a hung request must not hold a
+        // request thread open indefinitely.
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch (err) {
+      // Never include the URL or the auth header in the thrown message — it
+      // propagates toward the client and would disclose internal topology (§6).
+      this.logger.error(
+        `Orthanc request failed (${path}): ${err instanceof Error ? err.message : 'unknown'}`,
+      );
+      throw new Error('Imaging server unavailable');
+    }
+  }
+}

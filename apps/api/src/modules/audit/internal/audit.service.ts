@@ -170,13 +170,24 @@ function subjectIdFor(event: DomainEvent): string | undefined {
 }
 
 function patientIdFor(event: DomainEvent): string | undefined {
-  return 'patientId' in event ? event.patientId : undefined;
+  if (!('patientId' in event)) return undefined;
+  // Explicitly normalise empty-string to undefined: patient_id is a uuid
+  // column, and '' is not a uuid. A denied access legitimately has no patient.
+  const value = event.patientId;
+  return value === undefined || value === '' ? undefined : value;
 }
 
 function metadataFor(event: DomainEvent): Record<string, unknown> {
   switch (event.type) {
     case 'StudyAccessed':
-      return { accessKind: event.accessKind, granted: event.granted };
+      return {
+        accessKind: event.accessKind,
+        granted: event.granted,
+        // Carried in metadata rather than subject_id: on a refusal there is no
+        // internal id to record, but WHAT was asked for is the useful part of
+        // the signal.
+        studyInstanceUid: event.studyInstanceUid,
+      };
     case 'StudyUploadCompleted':
       return {
         fileCount: event.fileCount,

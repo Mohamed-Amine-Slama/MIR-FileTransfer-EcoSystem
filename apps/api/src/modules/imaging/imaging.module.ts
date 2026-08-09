@@ -1,0 +1,29 @@
+import { Module } from '@nestjs/common';
+import { DatabaseModule } from '../../shared/db/database.module';
+import { EventsModule } from '../../shared/events/events.module';
+import { StorageModule } from '../../shared/storage/storage.module';
+import { SignedUrlService } from '../../shared/storage/signed-url.service';
+import { DicomWebController } from './internal/dicomweb.controller';
+import { IngestionService } from './internal/ingestion.service';
+import { OrthancHttpClient } from './internal/orthanc.http-client';
+import { ORTHANC_CLIENT } from './internal/orthanc.client';
+import { StudyAccessService } from './internal/study-access.service';
+import { UploadService } from './internal/upload.service';
+
+@Module({
+  imports: [DatabaseModule, EventsModule, StorageModule],
+  controllers: [DicomWebController],
+  providers: [
+    UploadService,
+    IngestionService,
+    StudyAccessService,
+    SignedUrlService,
+    OrthancHttpClient,
+    // The ingestion pipeline depends on the interface, not the HTTP class, so
+    // tests can substitute an in-memory Orthanc without touching production
+    // wiring (ADR-3: Orthanc is an index, and ingest must survive its outage).
+    { provide: ORTHANC_CLIENT, useExisting: OrthancHttpClient },
+  ],
+  exports: [UploadService, IngestionService, StudyAccessService],
+})
+export class ImagingModule {}

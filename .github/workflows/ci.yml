@@ -173,6 +173,11 @@ jobs:
       - name: Build web app
         run: pnpm --filter @mir/web... build
 
+      # P8.2: no path from the browser to Orthanc that bypasses the API.
+      # Runs against the built bundle, so it must follow the build step.
+      - name: No server secrets in the client bundle (P8.2)
+        run: pnpm check:bundle
+
       - name: Install Playwright browsers
         run: pnpm --filter @mir/web exec playwright install --with-deps chromium chromium-headless-shell
 

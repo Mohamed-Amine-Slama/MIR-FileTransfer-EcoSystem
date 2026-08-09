@@ -74,8 +74,18 @@ export interface PaymentSucceeded extends DomainEventBase {
 
 export interface StudyAccessed extends DomainEventBase {
   type: 'StudyAccessed';
-  studyId: string;
-  patientId: string;
+  /**
+   * Internal study id. UNDEFINED when access was refused — the row was
+   * invisible to the caller, so we genuinely do not know which study (if any)
+   * they were reaching for. Modelling it as `string` forced a DICOM UID into a
+   * uuid column, which made the audit INSERT fail and lost the very denial it
+   * was recording.
+   */
+  studyId: string | undefined;
+  /** The DICOM Study Instance UID the caller asked for. Always known. */
+  studyInstanceUid: string;
+  /** Undefined on a refusal, for the same reason as studyId. */
+  patientId: string | undefined;
   /** What the actor did: metadata query, image retrieval, thumbnail. */
   accessKind: 'metadata' | 'pixel_data' | 'thumbnail';
   /** False when the attempt was refused — denied attempts are audited too. */

@@ -85,6 +85,12 @@ export const configSchema = z.object({
   // Spec requires 5-15 minutes. The bounds are enforced here so a deployment
   // cannot quietly widen the window to hours.
   SIGNED_URL_TTL_SECONDS: intFromEnv('SIGNED_URL_TTL_SECONDS', 300, 900).default('600'),
+  // Dedicated key for URL signing. Separate from any session secret so the two
+  // can be rotated independently — rotating session keys must not silently
+  // invalidate every in-flight image request, and vice versa.
+  SIGNED_URL_SECRET: z
+    .string()
+    .min(32, 'SIGNED_URL_SECRET must be at least 32 characters'),
 
   // --- scheduling (DECISION D3) -------------------------------------------
   // Default OFF: the Tunisian doctor sees imaging only after payment succeeds.

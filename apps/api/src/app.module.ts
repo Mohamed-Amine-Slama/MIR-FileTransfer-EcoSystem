@@ -10,6 +10,7 @@ import { GlobalExceptionFilter } from './shared/errors/global-exception.filter';
 import { EventsModule } from './shared/events/events.module';
 import { AuditModule } from './modules/audit';
 import { ConsentModule } from './modules/consent';
+import { ImagingModule } from './modules/imaging';
 import { PatientsModule } from './modules/patients';
 
 /**
@@ -31,6 +32,7 @@ import { PatientsModule } from './modules/patients';
     AuditModule,
     PatientsModule,
     ConsentModule,
+    ImagingModule,
   ],
   providers: [
     TokenVerifier,

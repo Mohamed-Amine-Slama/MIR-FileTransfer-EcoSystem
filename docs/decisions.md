@@ -51,6 +51,43 @@ Consequences for the build:
 
 ---
 
+### D2a — Payment rail: Stripe
+
+**Decision: Stripe, as the payment gateway.** Recorded 2026-08-09. Supersedes the
+"evaluate bank transfer / cash-at-clinic" option in BUILD_SPEC P11.1.
+
+This resolves the *technical* half of D2: Stripe supports authorisation and
+delayed capture (`capture_method: manual`), which is exactly what D2 requires —
+hold at booking, capture when the Tunisian doctor accepts. It also keeps the
+platform out of PCI scope via Stripe Elements / Payment Intents, satisfying
+P11.2 rule 1.
+
+**UNRESOLVED, and it is not a technical problem (BLOCKING L7):**
+
+Stripe requires the *business* to be legally established in a country it
+supports. To the best of my knowledge **neither Libya nor Tunisia is on
+Stripe's supported-country list for opening an account** — this needs
+confirming against Stripe's current list, because it decides the corporate
+structure, not the code. If it holds, the platform entity has to be
+incorporated in a supported jurisdiction (an EU country, the UK, etc.) with
+payouts routed to Tunisia, which carries its own tax and regulatory
+consequences and must be reviewed by counsel.
+
+Separately, on the paying side: Libyan-issued cards that work on international
+rails are uncommon, and Libya is subject to sanctions screening that Stripe
+applies to both the business and the payer. A rail that is technically
+available but that a Libyan patient's card cannot actually clear is not a rail.
+
+**What this means for the build:** none of the above changes the integration
+work, so P11 proceeds. The billing module sits behind an internal `PaymentRail`
+interface with Stripe as the first implementation, so if L7 forces a different
+entity structure or an additional local rail, the change is confined to the
+billing module and does not reach scheduling.
+
+**Do not onboard real patients on this rail until L7 is answered in writing.**
+
+---
+
 ## D3 — Can the Tunisian doctor view studies before accepting/payment (triage)?
 
 **Decision: configurable toggle, default OFF. Image access requires successful payment.**
