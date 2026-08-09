@@ -28,11 +28,13 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'pnpm build && pnpm start',
+    // Serve only — the build is a separate step (CI runs it before this job).
+    // Bundling `pnpm build &&` in here made the whole suite fail with an opaque
+    // webServer timeout whenever the build was slow, which says nothing about
+    // the tests and sends you looking in the wrong place.
+    command: 'pnpm start',
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: !process.env['CI'],
-    // The Next build is slow on a cold cache, and slower still when the repo
-    // lives on a Windows drive mount under WSL.
-    timeout: 300_000,
+    timeout: 120_000,
   },
 });
