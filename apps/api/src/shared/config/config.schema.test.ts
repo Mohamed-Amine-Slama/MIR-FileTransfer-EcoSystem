@@ -16,6 +16,7 @@ const VALID: NodeJS.ProcessEnv = {
   ORTHANC_URL: 'http://orthanc.internal:8042',
   ORTHANC_USERNAME: 'mir-api',
   ORTHANC_PASSWORD: 'local-dev-only',
+  SIGNED_URL_SECRET: 'test-signing-key-at-least-32-characters-long',
 };
 
 describe('config validation (P1.6)', () => {
@@ -88,6 +89,14 @@ describe('config validation (P1.6)', () => {
       loadConfig({ ...VALID, SCHEDULING_TRIAGE_BEFORE_PAYMENT: 'true' })
         .SCHEDULING_TRIAGE_BEFORE_PAYMENT,
     ).toBe(true);
+  });
+
+  it('requires a signing key long enough to be a key (P8.2)', () => {
+    // A short HMAC key is brute-forceable, and these URLs grant access to
+    // patient imaging.
+    expect(() => loadConfig({ ...VALID, SIGNED_URL_SECRET: 'short' })).toThrow(
+      /SIGNED_URL_SECRET/,
+    );
   });
 
   it('rejects an unknown NODE_ENV', () => {

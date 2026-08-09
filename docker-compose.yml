@@ -42,6 +42,53 @@ services:
       timeout: 3s
       retries: 30
 
+  orthanc:
+    image: orthancteam/orthanc:24.10.1
+    container_name: mir-orthanc
+    # LOCAL DEVELOPMENT ONLY. In deployed environments Orthanc runs in a
+    # PRIVATE subnet with no internet route, reachable only from the API
+    # (BUILD_SPEC P8.1). The port mapping below exists so a developer can
+    # inspect it; it is exactly what must NOT exist in staging or production.
+    environment:
+      ORTHANC__NAME: MIR-dev
+      ORTHANC__REGISTERED_USERS: '{"mir-api":"change-me"}'
+      ORTHANC__DICOM_SERVER_ENABLED: 'false'
+      ORTHANC__AUTHENTICATION_ENABLED: 'true'
+      ORTHANC__DICOM_WEB__ENABLE: 'true'
+      ORTHANC__OVERWRITE_INSTANCES: 'false'
+      # ADR-5: never transcode. Expressed by OMITTING IngestTranscoding —
+      # setting it to an empty string makes Orthanc refuse to start.
+    volumes:
+      - ./infra/orthanc/orthanc.json:/etc/orthanc/orthanc.json:ro
+      - mir-orthanc-db:/var/lib/orthanc/db
+    ports:
+      - '${ORTHANC_HOST_PORT:-8042}:8042'
+    healthcheck:
+      # The image ships neither curl nor wget, and CMD-SHELL runs dash (so
+      # bash's /dev/tcp is unavailable too). python3 IS present.
+      #
+      # The probe asserts an UNAUTHENTICATED request is refused with 401. That
+      # checks two things at once: the server is up, and authentication is
+      # still switched on. If someone disables auth, the container goes red
+      # instead of quietly serving patient imaging to anyone who can reach the
+      # port. It also needs no credentials in this file.
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import sys, urllib.error, urllib.request
+          try:
+              urllib.request.urlopen('http://127.0.0.1:8042/system', timeout=3)
+          except urllib.error.HTTPError as e:
+              sys.exit(0 if e.code == 401 else 1)
+          except Exception:
+              sys.exit(1)
+          sys.exit(1)  # 200 without credentials means auth is OFF
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     container_name: mir-keycloak
@@ -63,3 +110,4 @@ services:
 
 volumes:
   mir-pgdata:
+  mir-orthanc-db:

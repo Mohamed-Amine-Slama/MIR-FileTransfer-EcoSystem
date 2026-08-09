@@ -53,7 +53,7 @@
   "//SslNote": "TLS terminates at the internal load balancer; Orthanc is not internet-facing.",
 
   "//Plugins": ["DICOMweb for QIDO/WADO/STOW; object-storage to keep pixel data in S3."],
-  "Plugins": ["/usr/share/orthanc/plugins", "/usr/local/share/orthanc/plugins"],
+  "Plugins": ["/usr/share/orthanc/plugins"],
 
   "DicomWeb": {
     "Enable": true,
@@ -75,10 +75,14 @@
   "OverwriteInstances": false,
 
   "//Lossy": [
-    "ADR-5: never transcode to a lossy transfer syntax. No ingest-time",
-    "re-encoding of any kind is configured, and none may be added."
+    "ADR-5: never transcode to a lossy transfer syntax.",
+    "",
+    "IngestTranscoding is deliberately ABSENT rather than set to \"\". Orthanc",
+    "parses an empty string as a transfer syntax name and refuses to start:",
+    "  Parameter out of range: Unknown transfer syntax for ingest transcoding:",
+    "Omitting the key is how 'do not transcode' is expressed. Do not add it",
+    "back with any value — every value is a re-encode."
   ],
-  "IngestTranscoding": "",
   "DicomLossyTranscodingQuality": 100,
 
   "//Jobs": ["Long-running jobs survive restart so a large STOW batch is not lost."],

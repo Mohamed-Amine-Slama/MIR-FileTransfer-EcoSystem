@@ -148,6 +148,7 @@ describe('P1.5 route access declaration', () => {
       ORTHANC_URL: 'http://orthanc.invalid:8042',
       ORTHANC_USERNAME: 'unused',
       ORTHANC_PASSWORD: 'unused-local',
+      SIGNED_URL_SECRET: 'unused-test-signing-key-at-least-32-chars',
     });
 
     const { AppModule } = await import('../../app.module');

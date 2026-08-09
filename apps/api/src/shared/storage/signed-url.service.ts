@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { APP_CONFIG } from '../config/config.module';
 import type { AppConfig } from '../config/config.schema';
 
@@ -38,11 +38,24 @@ export type VerificationResult =
 const MIN_TTL_SECONDS = 300;
 const MAX_TTL_SECONDS = 900;
 
+/**
+ * Injection token for the clock.
+ *
+ * Nest reads constructor parameter types from decorator metadata and cannot
+ * see a TypeScript default value, so an undecorated `now: () => number = ...`
+ * parameter is treated as a dependency it must resolve — and fails at boot
+ * with "can't resolve dependencies ... argument Function at index [1]".
+ * Marking it @Optional() with an explicit token means Nest passes undefined in
+ * production (so the default applies) while tests can still inject a
+ * controllable clock.
+ */
+export const CLOCK = Symbol('CLOCK');
+
 @Injectable()
 export class SignedUrlService {
   constructor(
     @Inject(APP_CONFIG) private readonly config: AppConfig,
-    private readonly now: () => number = () => Date.now(),
+    @Optional() @Inject(CLOCK) private readonly now: () => number = () => Date.now(),
   ) {}
 
   /** Signing key. Derived from the app secret, never reused for anything else. */
