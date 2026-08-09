@@ -128,6 +128,28 @@ describe('P1.5 route access declaration', () => {
   it('passes for the real application module', async () => {
     // Guards against the audit silently finding nothing because discovery is
     // misconfigured — the real app must be scanned and must be clean.
+    //
+    // AppModule validates configuration at construction (P1.6), so a complete
+    // environment is required just to instantiate it. These point at nothing
+    // real: the test only builds the DI graph and enumerates routes; no
+    // connection is opened.
+    const saved = { ...process.env };
+    Object.assign(process.env, {
+      NODE_ENV: 'test',
+      DATABASE_URL: 'postgresql://mir_app:x@127.0.0.1:5432/unused',
+      REDIS_URL: 'redis://127.0.0.1:6379',
+      KEYCLOAK_ISSUER_URL: 'https://auth.invalid/realms/mir',
+      KEYCLOAK_AUDIENCE: 'mir-api',
+      KEYCLOAK_JWKS_URL: 'https://auth.invalid/realms/mir/protocol/openid-connect/certs',
+      AWS_REGION: 'eu-south-1',
+      S3_BUCKET_ORIGINALS: 'unused-originals',
+      S3_BUCKET_DERIVED: 'unused-derived',
+      S3_BUCKET_AUDIT_LOGS: 'unused-audit',
+      ORTHANC_URL: 'http://orthanc.invalid:8042',
+      ORTHANC_USERNAME: 'unused',
+      ORTHANC_PASSWORD: 'unused-local',
+    });
+
     const { AppModule } = await import('../../app.module');
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     const app = moduleRef.createNestApplication();
@@ -139,6 +161,7 @@ describe('P1.5 route access declaration', () => {
       expect(discovery.getControllers().length).toBeGreaterThan(0);
     } finally {
       await app.close();
+      process.env = saved;
     }
   });
 });
