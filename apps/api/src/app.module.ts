@@ -12,6 +12,7 @@ import { AuditModule } from './modules/audit';
 import { ConsentModule } from './modules/consent';
 import { ImagingModule } from './modules/imaging';
 import { PatientsModule } from './modules/patients';
+import { SchedulingModule } from './modules/scheduling';
 
 /**
  * Application root.
@@ -33,6 +34,7 @@ import { PatientsModule } from './modules/patients';
     PatientsModule,
     ConsentModule,
     ImagingModule,
+    SchedulingModule,
   ],
   providers: [
     TokenVerifier,

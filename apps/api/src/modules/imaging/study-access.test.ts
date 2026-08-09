@@ -15,8 +15,9 @@ import {
   type Harness,
 } from '../../shared/db/testing/rls-harness';
 import { EventBus } from '../../shared/events/event-bus';
-import { AuditService } from '../audit/internal/audit.service';
-import { AuditSubscriber } from '../audit/internal/audit.subscriber';
+// Public API only — reaching into modules/audit/internal/ would fail the P1.4
+// boundary check, and rightly so.
+import { AuditService, AuditSubscriber } from '../audit';
 import { SignedUrlService } from '../../shared/storage/signed-url.service';
 import { StudyAccessService } from './internal/study-access.service';
 

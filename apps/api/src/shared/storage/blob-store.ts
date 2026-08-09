@@ -40,6 +40,7 @@ export interface BlobStore {
 
   // --- derived: regenerable ------------------------------------------------
   putDerived(key: string, data: Uint8Array): Promise<void>;
+  getDerived(key: string): Promise<Uint8Array>;
   derivedExists(key: string): Promise<boolean>;
 }
 

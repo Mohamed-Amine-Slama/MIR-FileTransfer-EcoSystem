@@ -118,6 +118,14 @@ export class LocalBlobStore implements BlobStore {
     await writeFile(file, data);
   }
 
+  async getDerived(key: string): Promise<Uint8Array> {
+    try {
+      return new Uint8Array(await readFile(this.path('derived', key)));
+    } catch {
+      throw new ObjectNotFoundError(key);
+    }
+  }
+
   async derivedExists(key: string): Promise<boolean> {
     try {
       await stat(this.path('derived', key));

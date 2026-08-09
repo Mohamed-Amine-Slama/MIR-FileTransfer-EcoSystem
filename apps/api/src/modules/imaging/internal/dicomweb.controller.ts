@@ -1,6 +1,9 @@
-import { Controller, Get, Header, Param, Res } from '@nestjs/common';
+import { Controller, Get, Header, Inject, NotFoundException, Param, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { RequiresRole } from '../../../shared/authz/access-metadata';
+import { DatabaseService } from '../../../shared/db/database.service';
+import { BLOB_STORE } from '../../../shared/storage/storage.module';
+import { derivedThumbnailKey, type BlobStore } from '../../../shared/storage/blob-store';
 import { OrthancHttpClient } from './orthanc.http-client';
 import { StudyAccessService } from './study-access.service';
 
@@ -25,7 +28,80 @@ export class DicomWebController {
   constructor(
     private readonly access: StudyAccessService,
     private readonly orthanc: OrthancHttpClient,
+    private readonly db: DatabaseService,
+    @Inject(BLOB_STORE) private readonly blobs: BlobStore,
   ) {}
+
+  /**
+   * Instance list for a study — P9.1 progressive loading.
+   *
+   * UIDs only, no pixel data. The viewer uses this to know how many frames
+   * exist and to request them ONE AT A TIME. Returning the frames here would
+   * be the full-study prefetch the gate forbids.
+   */
+  @RequiresRole('tunisia_doctor', 'libya_doctor', 'patient')
+  @Get('studies/:studyUid/instances')
+  @Header('cache-control', 'no-store')
+  async instances(
+    @Param('studyUid') studyUid: string,
+  ): Promise<{ instances: { sopInstanceUid: string; seriesInstanceUid: string }[] }> {
+    const study = await this.access.authoriseStudyAccess(studyUid, 'metadata');
+
+    const rows = await this.db.tx(async (tx) => {
+      const res = await tx.query<{ sop_uid: string; series_uid: string }>(
+        `SELECT sop_uid, series_uid FROM imaging_instances
+         WHERE study_id = $1 ORDER BY series_uid, sop_uid`,
+        [study.studyId],
+      );
+      return res.rows;
+    });
+
+    return {
+      instances: rows.map((r) => ({
+        sopInstanceUid: r.sop_uid,
+        seriesInstanceUid: r.series_uid,
+      })),
+    };
+  }
+
+  /**
+   * Small JPEG preview of one instance — P9.1 "thumbnails first".
+   *
+   * This is what appears on screen inside the 5-second budget. It is NOT
+   * diagnostic: 8-bit, window-levelled by heuristic, downsampled. The viewer's
+   * persistent banner says so.
+   */
+  @RequiresRole('tunisia_doctor', 'libya_doctor', 'patient')
+  @Get('studies/:studyUid/instances/:sopUid/thumbnail')
+  async thumbnail(
+    @Param('studyUid') studyUid: string,
+    @Param('sopUid') sopUid: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const study = await this.access.authoriseStudyAccess(studyUid, 'thumbnail');
+
+    const key = derivedThumbnailKey({
+      patientId: study.patientId,
+      studyInstanceUid: study.studyInstanceUid,
+      sopInstanceUid: sopUid,
+    });
+
+    let bytes: Uint8Array;
+    try {
+      bytes = await this.blobs.getDerived(key);
+    } catch {
+      // A thumbnail may legitimately be absent (compressed transfer syntax, or
+      // ingest still running). 404 rather than a placeholder image: the viewer
+      // must be able to tell "no preview" from "here is a preview of nothing".
+      throw new NotFoundException('Thumbnail not available');
+    }
+
+    res.status(200);
+    res.setHeader('content-type', 'image/jpeg');
+    // Private, short-lived: it is patient imaging, however small.
+    res.setHeader('cache-control', 'private, max-age=300, no-transform');
+    res.end(Buffer.from(bytes));
+  }
 
   /** QIDO-RS: study-level metadata. */
   @RequiresRole('tunisia_doctor', 'libya_doctor', 'patient')

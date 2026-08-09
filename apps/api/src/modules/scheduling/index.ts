@@ -1,12 +1,15 @@
 /**
  * Public API of the `scheduling` module (BUILD_SPEC §5.1).
  *
- * Everything another module is allowed to touch is re-exported here. Anything
- * under `internal/` is private and importing it from outside this directory
- * fails the build (P1.4).
- *
- * Cross-module calls go through this file or through domain events (§5.2).
- * There is no third option — in particular, no module may query another
- * module's tables directly.
+ * `billing` consumes this to confirm an appointment on PaymentSucceeded
+ * (§5.2). Note that double-booking protection is NOT part of this API — it
+ * lives in the database's exclusion constraint, where concurrency cannot
+ * defeat it, and no caller can opt out of it.
  */
-export {};
+export { SchedulingService, SlotUnavailableError } from './internal/scheduling.service';
+export type {
+  Appointment,
+  AvailabilityWindow,
+  BookingInput,
+} from './internal/scheduling.service';
+export { SchedulingModule } from './scheduling.module';

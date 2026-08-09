@@ -1,0 +1,489 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { AppConfig } from '../../shared/config/config.schema';
+import { runWithContext, type RequestContext } from '../../shared/context/request-context';
+import { DatabaseService } from '../../shared/db/database.service';
+import {
+  appUrl,
+  createPatient,
+  createStudy,
+  createUser,
+  setupTestDatabase,
+  truncateAll,
+  type Harness,
+} from '../../shared/db/testing/rls-harness';
+import { EventBus } from '../../shared/events/event-bus';
+import { SchedulingService, SlotUnavailableError } from './internal/scheduling.service';
+
+/**
+ * BUILD_SPEC P10 — scheduling.
+ *
+ * P10.2 gate: "Fire 50 concurrent booking requests for the same slot. EXACTLY
+ * ONE succeeds; the rest receive a clean conflict error, not a 500."
+ *
+ * P10.1 gate: "Timezone correctness verified with explicit test cases, not
+ * assumed."
+ */
+
+let h: Harness;
+let db: DatabaseService;
+let bus: EventBus;
+let scheduling: SchedulingService;
+
+const config = { PAYMENT_AUTHORIZATION_WINDOW_HOURS: 72 } as AppConfig;
+
+const ctx = (userId: string, role: RequestContext['role']): RequestContext => ({
+  userId,
+  role,
+  triageBeforePayment: false,
+  ipAddress: '41.208.1.5',
+  userAgent: 'vitest',
+  requestId: 'p10-test',
+});
+
+beforeAll(async () => {
+  h = await setupTestDatabase();
+  db = new DatabaseService({ DATABASE_URL: appUrl(), DATABASE_POOL_MAX: 20 } as AppConfig);
+  bus = new EventBus();
+  scheduling = new SchedulingService(db, bus, config);
+}, 120_000);
+
+afterAll(async () => {
+  await db?.onModuleDestroy();
+  await h?.close();
+});
+
+beforeEach(async () => {
+  await truncateAll(h.owner);
+});
+
+/** A fixed future slot, in UTC. */
+const SLOT_START = new Date(Date.UTC(2026, 5, 15, 9, 0, 0));
+const SLOT_END = new Date(Date.UTC(2026, 5, 15, 9, 30, 0));
+
+describe('P10.2 booking concurrency (the gate)', () => {
+  it('exactly one of 50 concurrent bookings for the same slot succeeds', async () => {
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+
+    // 50 DIFFERENT patients, each with their own claimed account, all racing
+    // for one slot. Same-patient retries would be a weaker test: the point is
+    // that fifty unrelated people cannot all be given the same appointment.
+    const contenders = await Promise.all(
+      Array.from({ length: 50 }, async () => {
+        const user = await createUser(h.owner, 'patient');
+        const patient = await createPatient(h.owner, libyaDoctor, user);
+        return { user, patient };
+      }),
+    );
+
+    const results = await Promise.allSettled(
+      contenders.map((c) =>
+        runWithContext(ctx(c.user, 'patient'), () =>
+          scheduling.book({
+            patientId: c.patient,
+            doctorId: tunisDoctor,
+            startsAt: SLOT_START,
+            endsAt: SLOT_END,
+          }),
+        ),
+      ),
+    );
+
+    const succeeded = results.filter((r) => r.status === 'fulfilled');
+    const failed = results.filter((r) => r.status === 'rejected');
+
+    expect(succeeded).toHaveLength(1);
+    expect(failed).toHaveLength(49);
+
+    // Every loser gets a CLEAN CONFLICT, not a 500. A raw constraint error
+    // reaching the client would be both a bad experience and an internals leak.
+    for (const f of failed) {
+      const reason = (f as PromiseRejectedResult).reason;
+      expect(reason).toBeInstanceOf(SlotUnavailableError);
+      expect((reason as SlotUnavailableError).getStatus()).toBe(409);
+    }
+
+    // And the database holds exactly one appointment.
+    const rows = await h.owner.query('SELECT id FROM scheduling_appointments');
+    expect(rows.rowCount).toBe(1);
+  });
+
+  it('is deterministic across repeated runs', async () => {
+    // A concurrency test that passes sometimes proves nothing. Five rounds.
+    for (let round = 0; round < 5; round++) {
+      await truncateAll(h.owner);
+      const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+      const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+
+      const contenders = await Promise.all(
+        Array.from({ length: 12 }, async () => {
+          const user = await createUser(h.owner, 'patient');
+          const patient = await createPatient(h.owner, libyaDoctor, user);
+          return { user, patient };
+        }),
+      );
+
+      const results = await Promise.allSettled(
+        contenders.map((c) =>
+          runWithContext(ctx(c.user, 'patient'), () =>
+            scheduling.book({
+              patientId: c.patient,
+              doctorId: tunisDoctor,
+              startsAt: SLOT_START,
+              endsAt: SLOT_END,
+            }),
+          ),
+        ),
+      );
+
+      expect(
+        results.filter((r) => r.status === 'fulfilled'),
+        `round ${round}`,
+      ).toHaveLength(1);
+    }
+  });
+
+  it('allows a second booking for a DIFFERENT slot with the same doctor', async () => {
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const u1 = await createUser(h.owner, 'patient');
+    const u2 = await createUser(h.owner, 'patient');
+    const p1 = await createPatient(h.owner, libyaDoctor, u1);
+    const p2 = await createPatient(h.owner, libyaDoctor, u2);
+
+    await runWithContext(ctx(u1, 'patient'), () =>
+      scheduling.book({ patientId: p1, doctorId: tunisDoctor, startsAt: SLOT_START, endsAt: SLOT_END }),
+    );
+
+    const later = new Date(SLOT_END.getTime());
+    const laterEnd = new Date(SLOT_END.getTime() + 30 * 60_000);
+    const second = await runWithContext(ctx(u2, 'patient'), () =>
+      scheduling.book({ patientId: p2, doctorId: tunisDoctor, startsAt: later, endsAt: laterEnd }),
+    );
+
+    expect(second.id).toBeDefined();
+  });
+
+  it('rejects a PARTIALLY overlapping booking, not just an identical one', async () => {
+    // The constraint is on range overlap. A 15-minute-late start still
+    // collides, and application-level equality checks would miss it.
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const u1 = await createUser(h.owner, 'patient');
+    const u2 = await createUser(h.owner, 'patient');
+    const p1 = await createPatient(h.owner, libyaDoctor, u1);
+    const p2 = await createPatient(h.owner, libyaDoctor, u2);
+
+    await runWithContext(ctx(u1, 'patient'), () =>
+      scheduling.book({ patientId: p1, doctorId: tunisDoctor, startsAt: SLOT_START, endsAt: SLOT_END }),
+    );
+
+    await expect(
+      runWithContext(ctx(u2, 'patient'), () =>
+        scheduling.book({
+          patientId: p2,
+          doctorId: tunisDoctor,
+          startsAt: new Date(SLOT_START.getTime() + 15 * 60_000),
+          endsAt: new Date(SLOT_END.getTime() + 15 * 60_000),
+        }),
+      ),
+    ).rejects.toBeInstanceOf(SlotUnavailableError);
+  });
+
+  it('frees the slot after cancellation', async () => {
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const u1 = await createUser(h.owner, 'patient');
+    const u2 = await createUser(h.owner, 'patient');
+    const p1 = await createPatient(h.owner, libyaDoctor, u1);
+    const p2 = await createPatient(h.owner, libyaDoctor, u2);
+
+    const first = await runWithContext(ctx(u1, 'patient'), () =>
+      scheduling.book({ patientId: p1, doctorId: tunisDoctor, startsAt: SLOT_START, endsAt: SLOT_END }),
+    );
+    await runWithContext(ctx(u1, 'patient'), () => scheduling.cancel(first.id));
+
+    // The exclusion constraint excludes cancelled rows, so the slot reopens.
+    const second = await runWithContext(ctx(u2, 'patient'), () =>
+      scheduling.book({ patientId: p2, doctorId: tunisDoctor, startsAt: SLOT_START, endsAt: SLOT_END }),
+    );
+    expect(second.id).not.toBe(first.id);
+  });
+
+  it('two doctors can be booked for the same instant', async () => {
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const docA = await createUser(h.owner, 'tunisia_doctor');
+    const docB = await createUser(h.owner, 'tunisia_doctor');
+    const u = await createUser(h.owner, 'patient');
+    const p = await createPatient(h.owner, libyaDoctor, u);
+
+    await runWithContext(ctx(u, 'patient'), () =>
+      scheduling.book({ patientId: p, doctorId: docA, startsAt: SLOT_START, endsAt: SLOT_END }),
+    );
+    // The constraint is per doctor, not global.
+    const second = await runWithContext(ctx(u, 'patient'), () =>
+      scheduling.book({ patientId: p, doctorId: docB, startsAt: SLOT_START, endsAt: SLOT_END }),
+    );
+    expect(second.doctorId).toBe(docB);
+  });
+
+  it('starts a booking at pending_payment (DECISION D2)', async () => {
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const u = await createUser(h.owner, 'patient');
+    const p = await createPatient(h.owner, libyaDoctor, u);
+
+    const appt = await runWithContext(ctx(u, 'patient'), () =>
+      scheduling.book({ patientId: p, doctorId: tunisDoctor, startsAt: SLOT_START, endsAt: SLOT_END }),
+    );
+    expect(appt.status).toBe('pending_payment');
+  });
+
+  it('emits AppointmentBooked exactly once per successful booking', async () => {
+    const seen: string[] = [];
+    bus.subscribe('AppointmentBooked', (e) => {
+      seen.push(e.appointmentId);
+    });
+
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const contenders = await Promise.all(
+      Array.from({ length: 10 }, async () => {
+        const user = await createUser(h.owner, 'patient');
+        return { user, patient: await createPatient(h.owner, libyaDoctor, user) };
+      }),
+    );
+
+    await Promise.allSettled(
+      contenders.map((c) =>
+        runWithContext(ctx(c.user, 'patient'), () =>
+          scheduling.book({
+            patientId: c.patient,
+            doctorId: tunisDoctor,
+            startsAt: SLOT_START,
+            endsAt: SLOT_END,
+          }),
+        ),
+      ),
+    );
+
+    // Nine losers must not produce nine notifications and nine billing rows.
+    expect(seen).toHaveLength(1);
+  });
+
+  it('cannot book on behalf of another patient', async () => {
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const attacker = await createUser(h.owner, 'patient');
+    const victimUser = await createUser(h.owner, 'patient');
+    const victimPatient = await createPatient(h.owner, libyaDoctor, victimUser);
+
+    await expect(
+      runWithContext(ctx(attacker, 'patient'), () =>
+        scheduling.book({
+          patientId: victimPatient,
+          doctorId: tunisDoctor,
+          startsAt: SLOT_START,
+          endsAt: SLOT_END,
+        }),
+      ),
+    ).rejects.toThrow(/not found/i);
+  });
+});
+
+describe('P10.1 availability and timezones', () => {
+  it('stores and returns UTC instants, unaffected by the server timezone', async () => {
+    // Libya is UTC+2, Tunisia UTC+1, neither observes DST. The correctness
+    // property is that an instant round-trips unchanged whatever TZ the
+    // process runs in — display conversion is the client's job (§6).
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+
+    const original = process.env.TZ;
+    try {
+      process.env.TZ = 'Africa/Tripoli'; // UTC+2
+      const created = await runWithContext(ctx(tunisDoctor, 'tunisia_doctor'), () =>
+        scheduling.addAvailability({ startsAt: SLOT_START, endsAt: SLOT_END }),
+      );
+
+      expect(created.startsAt.toISOString()).toBe('2026-06-15T09:00:00.000Z');
+      expect(created.endsAt.toISOString()).toBe('2026-06-15T09:30:00.000Z');
+    } finally {
+      if (original === undefined) delete process.env.TZ;
+      else process.env.TZ = original;
+    }
+  });
+
+  it('a slot published in Tunis lands at the right local time in Tripoli', async () => {
+    // 09:00 UTC is 10:00 in Tunis (UTC+1) and 11:00 in Tripoli (UTC+2).
+    // Same instant, different wall clocks — this is the case P10.1 asks about.
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const created = await runWithContext(ctx(tunisDoctor, 'tunisia_doctor'), () =>
+      scheduling.addAvailability({ startsAt: SLOT_START, endsAt: SLOT_END }),
+    );
+
+    const tunis = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Africa/Tunis',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(created.startsAt);
+    const tripoli = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Africa/Tripoli',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(created.startsAt);
+
+    expect(tunis).toBe('10:00');
+    expect(tripoli).toBe('11:00');
+  });
+
+  it('stays correct across a European DST boundary', async () => {
+    // Neither Libya nor Tunisia observes DST, but a doctor travelling, or a
+    // browser in an EU timezone, will cross one. The stored instant must not
+    // move.
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const summer = new Date(Date.UTC(2026, 6, 15, 9, 0, 0)); // July
+    const winter = new Date(Date.UTC(2026, 0, 15, 9, 0, 0)); // January
+
+    const a = await runWithContext(ctx(tunisDoctor, 'tunisia_doctor'), () =>
+      scheduling.addAvailability({ startsAt: summer, endsAt: new Date(summer.getTime() + 1800_000) }),
+    );
+    const b = await runWithContext(ctx(tunisDoctor, 'tunisia_doctor'), () =>
+      scheduling.addAvailability({ startsAt: winter, endsAt: new Date(winter.getTime() + 1800_000) }),
+    );
+
+    const local = (d: Date): string =>
+      new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Africa/Tripoli',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).format(d);
+
+    // Tripoli is UTC+2 in BOTH: 11:00 either side of the European switch.
+    expect(local(a.startsAt)).toBe('11:00');
+    expect(local(b.startsAt)).toBe('11:00');
+  });
+
+  it('lists open slots and excludes ones already taken', async () => {
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const u = await createUser(h.owner, 'patient');
+    const p = await createPatient(h.owner, libyaDoctor, u);
+
+    const windowStart = new Date(Date.UTC(2026, 5, 15, 9, 0, 0));
+    const windowEnd = new Date(Date.UTC(2026, 5, 15, 11, 0, 0)); // 4 x 30min
+    await runWithContext(ctx(tunisDoctor, 'tunisia_doctor'), () =>
+      scheduling.addAvailability({ startsAt: windowStart, endsAt: windowEnd }),
+    );
+
+    const before = await runWithContext(ctx(u, 'patient'), () =>
+      scheduling.listOpenSlots(tunisDoctor, windowStart, windowEnd),
+    );
+    expect(before).toHaveLength(4);
+
+    await runWithContext(ctx(u, 'patient'), () =>
+      scheduling.book({ patientId: p, doctorId: tunisDoctor, startsAt: SLOT_START, endsAt: SLOT_END }),
+    );
+
+    const after = await runWithContext(ctx(u, 'patient'), () =>
+      scheduling.listOpenSlots(tunisDoctor, windowStart, windowEnd),
+    );
+    expect(after).toHaveLength(3);
+    expect(after.some((s) => s.startsAt.getTime() === SLOT_START.getTime())).toBe(false);
+  });
+
+  it('releases appointments whose payment authorisation expired (D2)', async () => {
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const u = await createUser(h.owner, 'patient');
+    const p = await createPatient(h.owner, libyaDoctor, u);
+
+    const appt = await runWithContext(ctx(u, 'patient'), () =>
+      scheduling.book({ patientId: p, doctorId: tunisDoctor, startsAt: SLOT_START, endsAt: SLOT_END }),
+    );
+
+    // Age it past the authorisation window.
+    await h.owner.query(
+      `UPDATE scheduling_appointments SET created_at = now() - interval '100 hours' WHERE id = $1`,
+      [appt.id],
+    );
+
+    const released = await runWithContext(ctx(u, 'patient'), () =>
+      scheduling.releaseExpiredAuthorisations(),
+    );
+    expect(released).toBeGreaterThanOrEqual(1);
+
+    const row = await h.owner.query<{ status: string }>(
+      'SELECT status FROM scheduling_appointments WHERE id = $1',
+      [appt.id],
+    );
+    expect(row.rows[0]?.status).toBe('cancelled');
+  });
+});
+
+describe('P10.3 study linkage', () => {
+  it('links the studies the caller can see', async () => {
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const otherDoctor = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const u = await createUser(h.owner, 'patient');
+    const p = await createPatient(h.owner, libyaDoctor, u);
+
+    const mine = await createStudy(h.owner, p, libyaDoctor);
+    const strangerPatient = await createPatient(h.owner, otherDoctor);
+    const notMine = await createStudy(h.owner, strangerPatient, otherDoctor);
+
+    const appt = await runWithContext(ctx(u, 'patient'), () =>
+      scheduling.book({
+        patientId: p,
+        doctorId: tunisDoctor,
+        startsAt: SLOT_START,
+        endsAt: SLOT_END,
+        studyIds: [mine],
+      }),
+    );
+
+    const links = await h.owner.query<{ study_id: string }>(
+      'SELECT study_id FROM scheduling_appointment_studies WHERE appointment_id = $1',
+      [appt.id],
+    );
+    expect(links.rows.map((r) => r.study_id)).toEqual([mine]);
+
+    // And nothing else leaked in.
+    expect(links.rowCount).toBe(1);
+    void notMine;
+  });
+
+  it('refuses the whole booking if a requested study is not linkable', async () => {
+    // Silently dropping it would mean the receiving doctor never gets a scan
+    // the patient believed they shared — discovered at the consultation, if
+    // ever. Loud failure is the safe direction.
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const otherDoctor = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const u = await createUser(h.owner, 'patient');
+    const p = await createPatient(h.owner, libyaDoctor, u);
+
+    const mine = await createStudy(h.owner, p, libyaDoctor);
+    const strangerPatient = await createPatient(h.owner, otherDoctor);
+    const notMine = await createStudy(h.owner, strangerPatient, otherDoctor);
+
+    await expect(
+      runWithContext(ctx(u, 'patient'), () =>
+        scheduling.book({
+          patientId: p,
+          doctorId: tunisDoctor,
+          startsAt: SLOT_START,
+          endsAt: SLOT_END,
+          studyIds: [mine, notMine],
+        }),
+      ),
+    ).rejects.toThrow(/not found/i);
+
+    // The transaction rolled back: no half-booked appointment left behind.
+    const appts = await h.owner.query('SELECT id FROM scheduling_appointments');
+    expect(appts.rowCount).toBe(0);
+  });
+});
