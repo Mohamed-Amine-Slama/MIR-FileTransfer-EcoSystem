@@ -8,6 +8,7 @@ import { IngestionService } from './internal/ingestion.service';
 import { OrthancHttpClient } from './internal/orthanc.http-client';
 import { ORTHANC_CLIENT } from './internal/orthanc.client';
 import { StudyAccessService } from './internal/study-access.service';
+import { ThumbnailService } from './internal/thumbnail.service';
 import { UploadService } from './internal/upload.service';
 
 @Module({
@@ -17,6 +18,7 @@ import { UploadService } from './internal/upload.service';
     UploadService,
     IngestionService,
     StudyAccessService,
+    ThumbnailService,
     SignedUrlService,
     OrthancHttpClient,
     // The ingestion pipeline depends on the interface, not the HTTP class, so

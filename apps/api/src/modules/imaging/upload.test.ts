@@ -22,6 +22,7 @@ import { originalKey } from '../../shared/storage/blob-store';
 import { ChecksumMismatchError, UploadService } from './internal/upload.service';
 import { IngestionService } from './internal/ingestion.service';
 import { InMemoryOrthancClient } from './internal/orthanc.client';
+import { ThumbnailService } from './internal/thumbnail.service';
 
 /**
  * BUILD_SPEC PHASE 7 — resumable upload. The spec calls this the highest
@@ -83,7 +84,7 @@ beforeAll(async () => {
   orthanc = new InMemoryOrthancClient();
   bus = new EventBus();
   uploads = new UploadService(db, blobs, config);
-  ingestion = new IngestionService(db, bus, blobs, orthanc);
+  ingestion = new IngestionService(db, bus, blobs, orthanc, new ThumbnailService());
 }, 120_000);
 
 afterAll(async () => {

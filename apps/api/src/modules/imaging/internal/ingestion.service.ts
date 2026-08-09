@@ -12,6 +12,7 @@ import {
 } from '../../../shared/storage/blob-store';
 import { stagingKey } from './upload.service';
 import { ORTHANC_CLIENT, type OrthancClient } from './orthanc.client';
+import { ThumbnailService } from './thumbnail.service';
 
 /**
  * Server-side ingestion — BUILD_SPEC P7.4.
@@ -52,6 +53,7 @@ export class IngestionService {
     private readonly bus: EventBus,
     @Inject(BLOB_STORE) private readonly blobs: BlobStore,
     @Inject(ORTHANC_CLIENT) private readonly orthanc: OrthancClient,
+    private readonly thumbnails: ThumbnailService,
   ) {}
 
   /**
@@ -189,16 +191,19 @@ export class IngestionService {
           );
         }
         try {
+          const thumb = await this.thumbnails.generate(bytes);
           await this.blobs.putDerived(
             derivedThumbnailKey({
               patientId: session.patient_id,
               studyInstanceUid: header.studyInstanceUID,
               sopInstanceUid: header.sopInstanceUID,
             }),
-            bytes.subarray(0, 0), // real rendering happens in the worker (P9)
+            thumb.bytes,
           );
         } catch (err) {
-          this.logger.error(`thumbnail generation failed: ${errMessage(err)}`);
+          // Derived data. A missing thumbnail slows the viewer's first paint;
+          // it does not lose the scan, so it must not fail the ingest.
+          this.logger.warn(`thumbnail generation failed: ${errMessage(err)}`);
         }
       }
 
