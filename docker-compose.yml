@@ -1,0 +1,39 @@
+# Local development dependencies only.
+#
+# ADR-7: this stack never contains real patient data. It is seeded from
+# test-data/ (synthetic DICOM) and nothing else. Do not point it at a
+# production snapshot, not even briefly.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mir-postgres
+    environment:
+      # Local development credentials. Deployed environments take these from
+      # AWS Secrets Manager (BUILD_SPEC §6) and never from a compose file.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mir
+    ports:
+      - '5432:5432'
+    volumes:
+      - mir-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d mir']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    container_name: mir-redis
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  mir-pgdata:

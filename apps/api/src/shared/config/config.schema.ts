@@ -1,0 +1,139 @@
+import { z } from 'zod';
+
+/**
+ * Validated application configuration (BUILD_SPEC P1.6).
+ *
+ * The app refuses to boot on missing or invalid config. The alternative —
+ * booting with `undefined` and discovering it at request time — means a
+ * misconfigured deployment can serve traffic while, say, pointing at the wrong
+ * S3 bucket or skipping token audience validation. Fail at boot, loudly.
+ *
+ * Values arrive as environment variables. In deployed environments those are
+ * injected from AWS Secrets Manager (BUILD_SPEC §6); nothing here is read from
+ * a committed file. `.env` is for local development only and is gitignored.
+ *
+ * Anything a lawyer might later change is configuration, not a constant —
+ * retention periods (L5) and the consent/payment windows especially, so legal
+ * answers can be applied without a code change (§2).
+ */
+
+const nonEmpty = (label: string) => z.string().min(1, `${label} must not be empty`);
+
+/** Accepts "true"/"false"/"1"/"0"; rejects anything ambiguous rather than guessing. */
+const boolFromEnv = z
+  .enum(['true', 'false', '1', '0'])
+  .transform((v) => v === 'true' || v === '1');
+
+const intFromEnv = (label: string, min: number, max: number) =>
+  z
+    .string()
+    .regex(/^\d+$/, `${label} must be a whole number`)
+    .transform(Number)
+    .refine((n) => n >= min && n <= max, `${label} must be between ${min} and ${max}`);
+
+export const configSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'staging', 'production']),
+  PORT: intFromEnv('PORT', 1, 65535).default('3000'),
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+
+  // --- database ------------------------------------------------------------
+  // Must be the non-superuser application role. It must NOT have BYPASSRLS
+  // (ADR-6, P3.2). There is deliberately no second "admin" connection string:
+  // an admin bypass connection defeats the entire second layer of defence
+  // (§17 anti-patterns).
+  DATABASE_URL: nonEmpty('DATABASE_URL').refine(
+    (v) => v.startsWith('postgres://') || v.startsWith('postgresql://'),
+    'DATABASE_URL must be a postgres:// or postgresql:// connection string',
+  ),
+  DATABASE_POOL_MAX: intFromEnv('DATABASE_POOL_MAX', 1, 200).default('10'),
+
+  // --- cache / queue -------------------------------------------------------
+  REDIS_URL: nonEmpty('REDIS_URL').refine(
+    (v) => v.startsWith('redis://') || v.startsWith('rediss://'),
+    'REDIS_URL must be a redis:// or rediss:// connection string',
+  ),
+
+  // --- identity (P4.1) -----------------------------------------------------
+  KEYCLOAK_ISSUER_URL: z.string().url('KEYCLOAK_ISSUER_URL must be a URL'),
+  KEYCLOAK_AUDIENCE: nonEmpty('KEYCLOAK_AUDIENCE'),
+  KEYCLOAK_JWKS_URL: z.string().url('KEYCLOAK_JWKS_URL must be a URL'),
+
+  // --- object storage (P2.4) ----------------------------------------------
+  AWS_REGION: nonEmpty('AWS_REGION'),
+  S3_BUCKET_ORIGINALS: nonEmpty('S3_BUCKET_ORIGINALS'),
+  S3_BUCKET_DERIVED: nonEmpty('S3_BUCKET_DERIVED'),
+  S3_BUCKET_AUDIT_LOGS: nonEmpty('S3_BUCKET_AUDIT_LOGS'),
+
+  // --- DICOM server (P8.1) -------------------------------------------------
+  ORTHANC_URL: z.string().url('ORTHANC_URL must be a URL'),
+  ORTHANC_USERNAME: nonEmpty('ORTHANC_USERNAME'),
+  ORTHANC_PASSWORD: nonEmpty('ORTHANC_PASSWORD'),
+
+  // --- upload (P7.2) -------------------------------------------------------
+  UPLOAD_CHUNK_SIZE_BYTES: intFromEnv('UPLOAD_CHUNK_SIZE_BYTES', 256 * 1024, 64 * 1024 * 1024)
+    .default(String(5 * 1024 * 1024)),
+  UPLOAD_SESSION_TTL_HOURS: intFromEnv('UPLOAD_SESSION_TTL_HOURS', 1, 720).default('72'),
+
+  // --- signed URLs (P8.2) --------------------------------------------------
+  // Spec requires 5-15 minutes. The bounds are enforced here so a deployment
+  // cannot quietly widen the window to hours.
+  SIGNED_URL_TTL_SECONDS: intFromEnv('SIGNED_URL_TTL_SECONDS', 300, 900).default('600'),
+
+  // --- scheduling (DECISION D3) -------------------------------------------
+  // Default OFF: the Tunisian doctor sees imaging only after payment succeeds.
+  // Consent is required in BOTH modes; this toggle never bypasses consent.
+  SCHEDULING_TRIAGE_BEFORE_PAYMENT: boolFromEnv.default('false'),
+
+  // --- billing (DECISION D2) ----------------------------------------------
+  // Authorise at booking, capture on acceptance. An authorisation that is
+  // never captured must expire and release the slot.
+  PAYMENT_AUTHORIZATION_WINDOW_HOURS: intFromEnv(
+    'PAYMENT_AUTHORIZATION_WINDOW_HOURS',
+    1,
+    720,
+  ).default('72'),
+
+  // --- retention (BLOCKING L5) --------------------------------------------
+  // These values are placeholders until counsel answers L5. They are config
+  // precisely so the legal answer is a deployment change, not a rewrite.
+  // Object Lock retention on the originals bucket must be set to match.
+  IMAGING_RETENTION_DAYS: intFromEnv('IMAGING_RETENTION_DAYS', 1, 36_500).default('3650'),
+  AUDIT_RETENTION_DAYS: intFromEnv('AUDIT_RETENTION_DAYS', 1, 36_500).default('3650'),
+
+  // --- consent (BLOCKING L4) ----------------------------------------------
+  CONSENT_TERMS_VERSION: nonEmpty('CONSENT_TERMS_VERSION').default('v1'),
+});
+
+export type AppConfig = z.infer<typeof configSchema>;
+
+export class ConfigValidationError extends Error {
+  constructor(public readonly issues: string[]) {
+    super(
+      `Invalid application configuration — refusing to start.\n\n` +
+        issues.map((i) => `  - ${i}`).join('\n') +
+        `\n\nSee .env.example for the full list of required variables.\n` +
+        `In deployed environments these come from AWS Secrets Manager, not a file.`,
+    );
+    this.name = 'ConfigValidationError';
+  }
+}
+
+/**
+ * Parse and validate configuration.
+ *
+ * Reports EVERY problem at once. Reporting only the first turns fixing a fresh
+ * environment into a guessing loop of boot-fail-fix-repeat.
+ */
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  const result = configSchema.safeParse(env);
+
+  if (!result.success) {
+    const issues = result.error.issues.map((issue) => {
+      const key = issue.path.join('.') || '(root)';
+      return `${key}: ${issue.message}`;
+    });
+    throw new ConfigValidationError(issues);
+  }
+
+  return result.data;
+}

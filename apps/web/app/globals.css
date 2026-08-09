@@ -1,0 +1,57 @@
+/*
+ * DECISION D4 requires RTL from day one. The rule that makes that cheap is:
+ * never use a physical direction property in application CSS.
+ *
+ *   margin-left        -> margin-inline-start
+ *   padding-right      -> padding-inline-end
+ *   text-align: left   -> text-align: start
+ *   left: 0            -> inset-inline-start: 0
+ *   border-left        -> border-inline-start
+ *
+ * Logical properties flip automatically with `dir`, so Arabic and French share
+ * one stylesheet. This is enforced by review, and by the lint rule added in a
+ * later phase — not by discipline alone.
+ */
+
+:root {
+  --color-bg: #ffffff;
+  --color-fg: #101418;
+  --color-muted: #5b6672;
+  --color-border: #dfe4ea;
+  --color-warning-bg: #fff4e5;
+  --color-warning-fg: #7a4b00;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0f1317;
+    --color-fg: #e8ecf1;
+    --color-muted: #9aa5b1;
+    --color-border: #262d35;
+    --color-warning-bg: #3a2a0d;
+    --color-warning-fg: #ffd79a;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: system-ui, -apple-system, 'Segoe UI', Tahoma, 'Noto Sans Arabic', sans-serif;
+  line-height: 1.6;
+}
+
+main {
+  max-width: 48rem;
+  margin-inline: auto;
+  padding-inline: var(--space-lg);
+  padding-block: var(--space-lg);
+}

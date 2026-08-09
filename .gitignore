@@ -1,0 +1,49 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# test output
+coverage/
+playwright-report/
+test-results/
+.vitest/
+
+# env — NEVER commit these. .env.example is the committed template.
+.env
+.env.*
+!.env.example
+
+# secrets / credentials (belt and braces alongside gitleaks in CI)
+*.pem
+*.key
+*.p12
+*.pfx
+.aws/
+credentials
+
+# terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl
+
+# editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*

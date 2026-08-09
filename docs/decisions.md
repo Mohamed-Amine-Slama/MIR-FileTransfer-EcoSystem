@@ -1,0 +1,117 @@
+# Product decisions (P0.1)
+
+Status: **answered** — 2026-08-09
+Decided by: project owner, in response to the BUILD_SPEC P0.1 gate.
+
+These five decisions were blocking everything downstream. They are settled.
+Changing any of them is a new decision, recorded as a new revision of this file
+with a date and a rationale — not an edit in place.
+
+---
+
+## D1 — Who creates the patient record?
+
+**Decision: the Libyan doctor creates the patient record. The patient later claims it via phone OTP.**
+
+Rationale: this matches the real clinic workflow — the doctor has the imaging CD
+or the PACS export in hand at the moment of referral, and the patient may not own
+a smartphone or have registered yet. Blocking the doctor on patient self-registration
+would strand studies at the point of care.
+
+Consequences for the build:
+- `patients_patients.created_by_doctor` is `NOT NULL`. Every patient has an originating doctor.
+- `patients_patients.claimed_by_user` is nullable and stays `NULL` until the claim succeeds.
+- The patient-facing RLS policies key off `claimed_by_user`, so an unclaimed patient
+  record is invisible to every patient account. This is correct: nobody should see it
+  until the phone number is proven.
+- The claim flow (P5.2) is on the critical path for patient consent (P5.3), because
+  consent must be granted by the patient, not by the doctor on their behalf.
+
+---
+
+## D2 — When is payment taken?
+
+**Decision: authorise at booking, capture when the Tunisian doctor accepts the case.**
+
+Rationale: the slot must be held the moment the patient commits, or contested slots
+resolve unfairly. But money should not move until the receiving doctor has agreed to
+take the case, otherwise every declined referral becomes a refund.
+
+Consequences for the build:
+- The billing module needs a rail supporting **auth/capture separation**. This is a
+  hard constraint to carry into the L7 / P11.1 provider evaluation.
+- **Open risk:** if L7 concludes that the only viable rail is bank transfer or
+  cash-at-clinic, auth/capture is not available and this decision must be revisited.
+  The billing module is therefore built against an internal `PaymentRail` interface
+  with the provider behind it, so a rail swap does not rewrite the scheduling module.
+- `scheduling_appointments.status` starts at `pending_payment`; authorisation moves it
+  to `authorised`; capture on doctor acceptance moves it to `confirmed`.
+- An authorisation that is never captured must expire and release the slot. The window
+  is configuration, not a constant.
+
+---
+
+## D3 — Can the Tunisian doctor view studies before accepting/payment (triage)?
+
+**Decision: configurable toggle, default OFF. Image access requires successful payment.**
+
+Rationale: defaulting closed means the conservative behaviour ships first and triage
+is a deliberate act of enabling, not an accident of configuration. P10.3 requires the
+toggle to exist either way.
+
+Consequences for the build:
+- Config key `SCHEDULING_TRIAGE_BEFORE_PAYMENT` (boolean, default `false`).
+- **Consent (P5.3) is required in both modes.** The toggle only moves the *payment*
+  gate; it never bypasses consent. A Tunisian doctor with no consent record naming
+  them sees nothing, in either mode, at both the API layer and the RLS layer.
+- Both modes must be covered by tests (P10.3 gate).
+
+---
+
+## D4 — Interface languages for v1?
+
+**Decision: Arabic and French. RTL support from day one.**
+
+Rationale: Arabic for Libyan doctors and patients, French for Tunisian doctors.
+Retrofitting RTL into a layout built LTR-first is expensive and never fully clean,
+so the direction-aware layout is a day-one constraint rather than a later project.
+
+Consequences for the build:
+- `identity_users.locale` defaults to `'ar'`.
+- Consent text (P5.3) is versioned **per locale**. A published version exists in both
+  `ar` and `fr` before it can be used in production.
+- The evidence hash stored on a consent record is the hash of the rendered text in the
+  locale the patient actually saw — not a canonical language.
+- Frontend uses logical CSS properties (`margin-inline-start`, not `margin-left`) so
+  direction flips without a second stylesheet.
+- No English in v1. Admin tooling is French.
+
+---
+
+## D5 — Primary region?
+
+**Decision: `eu-south-1` (Milan) primary, `eu-west-3` (Paris) as the fallback and DR region.**
+
+Rationale: Milan is the closest AWS region to Tunis, which matters because the payload
+is hundreds of megabytes of imaging over a constrained link.
+
+**Unverified precondition:** Milan must be confirmed to support every required service
+before infrastructure is applied — specifically S3 Object Lock in compliance mode,
+S3 cross-region replication, RDS PostgreSQL 16 multi-AZ, and customer-managed KMS keys
+with rotation. This has **not** been verified; there is no AWS account attached to this
+work yet. If any is missing, the decision falls back to Paris primary with Milan as DR.
+
+Consequences for the build:
+- Terraform pins `eu-south-1` as primary and `eu-west-3` as the replication target.
+- The region is a variable, not a literal, in every Terraform module, so the fallback
+  is a variable change rather than a rewrite.
+- Note: `eu-south-1` is an opt-in region. The account must explicitly enable it.
+
+---
+
+## Related blocking items not decided here
+
+D1–D5 are product decisions. They do **not** resolve the legal prerequisites L1–L8 in
+BUILD_SPEC §2, which require local counsel in both jurisdictions and remain open.
+In particular, D2 depends on L7 (payment rails) and the consent implementation behind
+D4 depends on L4 (required form of patient consent).

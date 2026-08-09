@@ -1,0 +1,79 @@
+# Secret scanning configuration (BUILD_SPEC P1.6).
+#
+# BUILD_SPEC §6: no secrets in code, in committed .env files, or in CI logs.
+# This runs in CI on every PR and on the full history.
+#
+# Scope note: gitleaks catches secrets that reach the repository. It does not
+# catch secrets that reach logs — that is the log-scrubbing gate in P13, which
+# is verified separately by deliberately logging a token and confirming it is
+# stripped.
+
+title = "MIR secret scanning"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "mir-orthanc-credentials"
+description = "Hardcoded Orthanc credentials — these must come from Secrets Manager"
+# Requires a quoted string literal after the separator. Without that anchor the
+# pattern also matches schema declarations like
+#   ORTHANC_PASSWORD: nonEmpty('ORTHANC_PASSWORD')
+# which name the variable rather than leaking it. A rule that cries wolf on
+# every config schema gets muted, and a muted rule protects nothing.
+regex = '''(?i)orthanc[_-]?(?:password|passwd|pwd|secret)['"]?\s*[:=]\s*['"][^'"\s]{6,}['"]'''
+tags = ["mir", "orthanc"]
+
+  [rules.allowlist]
+  description = "Documented placeholders, not credentials"
+  regexTarget = "match"
+  regexes = [
+    '''change-me''',
+    '''CHANGE_ME''',
+    '''local-dev-only''',
+  ]
+
+[[rules]]
+id = "mir-postgres-url-with-password"
+description = "PostgreSQL connection string containing a password"
+# gitleaks uses RE2, which has no negative lookahead. Placeholder values are
+# excluded by the rule-level allowlist below rather than inside the pattern.
+regex = '''postgres(?:ql)?://[^:/\s]+:[^@\s]{6,}@'''
+tags = ["mir", "database"]
+
+  [rules.allowlist]
+  description = "Documented placeholders, not credentials"
+  regexTarget = "match"
+  regexes = [
+    ''':change-me@''',
+    ''':CHANGE_ME@''',
+    ''':postgres@''',
+    ''':password@''',
+  ]
+
+[allowlist]
+description = "Paths that cannot contain real secrets"
+
+paths = [
+  # Synthetic DICOM. These are binary pixel-data blobs and trip entropy
+  # heuristics constantly. They are protected instead by check-synthetic.mjs,
+  # which proves every PatientName is synthetic (ADR-7).
+  '''^test-data/dicom/''',
+
+  # Lockfiles contain integrity hashes, not secrets.
+  '''pnpm-lock\.yaml$''',
+
+  # Build output. Gitignored, so it can never be committed, but `gitleaks dir`
+  # walks the filesystem rather than the index and would otherwise flag Next.js
+  # prerender manifests on every local run.
+  '''(^|/)\.next/''',
+  '''(^|/)dist/''',
+  '''(^|/)node_modules/''',
+  '''(^|/)coverage/''',
+  '''(^|/)playwright-report/''',
+]
+
+# NOTE: .env.example is deliberately NOT allowlisted. It is committed, so a
+# real value pasted into it is exactly the mistake this scan exists to catch.
+# Its placeholders ("change-me") are excluded by narrow rule-level allowlists
+# above rather than by exempting the whole file.

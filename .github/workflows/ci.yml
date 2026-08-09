@@ -1,0 +1,153 @@
+name: CI
+
+# BUILD_SPEC P1.3 — runs on every PR, fails the PR on any non-zero exit.
+#
+# The guardrail jobs (boundaries, authz, secrets, synthetic-data) are not
+# optional extras. They are the mechanism by which ADR-1's module boundaries
+# and ADR-7's no-real-data rule stay true. A PR that turns any of them off is
+# a PR that removes a safety property, and should be reviewed as such.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # BUILD_SPEC §4 pins Node 20 LTS. CI is the authority on the runtime version;
+  # a developer's local Node may be newer.
+  NODE_VERSION: '20'
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Fast, dependency-free checks. These run first so an obvious mistake fails
+  # in seconds rather than after a five-minute install.
+  # --------------------------------------------------------------------------
+  guardrails:
+    name: Guardrails (secrets, synthetic data)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks needs history to scan commits, not just the working tree.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # ADR-7: real patient data never leaves production. Fails if any
+      # PatientName under test-data/ is not on the synthetic allowlist.
+      - name: Synthetic test data only
+        run: node test-data/check-synthetic.mjs
+
+      # BUILD_SPEC P1.6 / §6: no secrets in code or CI logs.
+      - name: Secret scan (working tree)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_CONFIG: .gitleaks.toml
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # --------------------------------------------------------------------------
+  # install -> typecheck -> lint -> test -> build (P1.3, in order)
+  # --------------------------------------------------------------------------
+  build:
+    name: Typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+  # --------------------------------------------------------------------------
+  # P1.4 — module boundaries. Separate job so a boundary violation is
+  # immediately legible in the checks list rather than buried in a lint log.
+  # --------------------------------------------------------------------------
+  boundaries:
+    name: Module boundaries (P1.4)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Enforce module boundaries
+        run: pnpm boundaries
+
+      # Proves the boundary rules still reject violations. Without this, a
+      # config edit that quietly narrows a rule leaves the check passing
+      # forever while enforcing nothing.
+      - name: Verify boundary enforcement still works
+        run: pnpm boundaries:verify
+
+  # --------------------------------------------------------------------------
+  # P1.2 — browser end-to-end tests.
+  # --------------------------------------------------------------------------
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @mir/web exec playwright install --with-deps chromium
+
+      - name: Run e2e
+        run: pnpm --filter @mir/web test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7
