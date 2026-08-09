@@ -60,6 +60,32 @@ jobs:
   build:
     name: Typecheck, lint, test, build
     runs-on: ubuntu-latest
+
+    # The P3.2 row-level-security tests are the most important gate in the
+    # project and the spec requires them to run on every commit. They need a
+    # real PostgreSQL: RLS policies, role attributes and the gist exclusion
+    # constraint cannot be exercised against a mock or an in-memory shim.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mir
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_PG_HOST: 127.0.0.1
+      TEST_PG_PORT: '5433'
+      TEST_PG_SUPERUSER: postgres
+      TEST_PG_SUPERPASS: postgres
+
     steps:
       - uses: actions/checkout@v4
 
@@ -81,6 +107,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # Includes the P3.2 RLS suite. If PostgreSQL is unreachable these tests
+      # fail rather than skip — a silently skipped access-control test is
+      # indistinguishable from a passing one in a green build.
       - name: Test
         run: pnpm test
 

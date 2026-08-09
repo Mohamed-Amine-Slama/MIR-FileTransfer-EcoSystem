@@ -1,0 +1,414 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  asUser,
+  createAppointment,
+  createPatient,
+  createStudy,
+  createUser,
+  grantConsent,
+  linkStudy,
+  revokeConsent,
+  setupTestDatabase,
+  truncateAll,
+  type Harness,
+} from './testing/rls-harness';
+
+/**
+ * BUILD_SPEC P3.2 — the seven required row-level-security tests, plus the
+ * cases the seven imply.
+ *
+ * "Broken access control is the most common cause of serious breaches in
+ * early-stage health platforms." These run in CI on every commit.
+ *
+ * Every assertion runs on the `mir_app` connection: a non-superuser,
+ * non-owner, NOBYPASSRLS role with exactly the privileges the deployed
+ * application has. Asserting on the owner connection would prove nothing,
+ * because the owner bypasses the policies being tested.
+ */
+
+let h: Harness;
+
+beforeAll(async () => {
+  h = await setupTestDatabase();
+}, 120_000);
+
+afterAll(async () => {
+  await h?.close();
+});
+
+beforeEach(async () => {
+  await truncateAll(h.owner);
+});
+
+describe('P3.2 row-level security', () => {
+  // -------------------------------------------------------------------------
+  // Preconditions. If these fail, every test below is meaningless.
+  // -------------------------------------------------------------------------
+  describe('preconditions', () => {
+    it('the application role is not a superuser and cannot bypass RLS', async () => {
+      const res = await h.app.query<{
+        rolsuper: boolean;
+        rolbypassrls: boolean;
+        current_user: string;
+      }>(
+        `SELECT r.rolsuper, r.rolbypassrls, current_user
+         FROM pg_roles r WHERE r.rolname = current_user`,
+      );
+      const row = res.rows[0];
+      expect(row?.current_user).toBe('mir_app');
+      expect(row?.rolsuper).toBe(false);
+      // ADR-6: if this is ever true, every policy in the system is decorative.
+      expect(row?.rolbypassrls).toBe(false);
+    });
+
+    it('the application role does not own the patient-data tables', async () => {
+      // Owners bypass RLS unless FORCE is set, and can drop policies outright.
+      const res = await h.app.query<{ tablename: string; tableowner: string }>(
+        `SELECT tablename, tableowner FROM pg_tables
+         WHERE schemaname = 'public' AND tablename IN
+           ('imaging_studies','patients_patients','consent_records','audit_events')`,
+      );
+      expect(res.rows.length).toBe(4);
+      for (const row of res.rows) {
+        expect(row.tableowner).not.toBe('mir_app');
+      }
+    });
+
+    it('RLS is enabled AND forced on every patient-data table', async () => {
+      const res = await h.app.query<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>(
+        `SELECT relname, relrowsecurity, relforcerowsecurity
+         FROM pg_class
+         WHERE relname IN ('imaging_studies','imaging_instances','patients_patients',
+                           'consent_records','scheduling_appointments','audit_events')`,
+      );
+      expect(res.rows.length).toBe(6);
+      for (const row of res.rows) {
+        expect(row.relrowsecurity, `${row.relname} RLS enabled`).toBe(true);
+        expect(row.relforcerowsecurity, `${row.relname} RLS forced`).toBe(true);
+      }
+    });
+
+    it('an unset session context returns nothing rather than throwing', async () => {
+      // The spec's example policy uses current_setting('app.user_role') with no
+      // second argument, which THROWS when unset. That would break migrations,
+      // health checks and background jobs. Ours returns NULL, and NULL denies.
+      const doctor = await createUser(h.owner, 'libya_doctor');
+      const patient = await createPatient(h.owner, doctor);
+      await createStudy(h.owner, patient, doctor);
+
+      const res = await h.app.query('SELECT * FROM imaging_studies');
+      expect(res.rowCount).toBe(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // The seven required tests
+  // -------------------------------------------------------------------------
+
+  it('1. Libyan doctor A cannot see studies uploaded by doctor B', async () => {
+    const doctorA = await createUser(h.owner, 'libya_doctor');
+    const doctorB = await createUser(h.owner, 'libya_doctor');
+    const patientOfB = await createPatient(h.owner, doctorB);
+    await createStudy(h.owner, patientOfB, doctorB);
+
+    const rows = await asUser(h.app, { userId: doctorA, role: 'libya_doctor' }, async (c) => {
+      const r = await c.query('SELECT id FROM imaging_studies');
+      return r.rowCount;
+    });
+    expect(rows).toBe(0);
+
+    // And confirm doctor B *can* see it — otherwise this test would pass
+    // against a policy that simply denies everyone.
+    const bRows = await asUser(h.app, { userId: doctorB, role: 'libya_doctor' }, async (c) => {
+      const r = await c.query('SELECT id FROM imaging_studies');
+      return r.rowCount;
+    });
+    expect(bRows).toBe(1);
+  });
+
+  it('2. Patient X cannot see patient Y studies', async () => {
+    const doctor = await createUser(h.owner, 'libya_doctor');
+    const userX = await createUser(h.owner, 'patient');
+    const userY = await createUser(h.owner, 'patient');
+    const patientX = await createPatient(h.owner, doctor, userX);
+    const patientY = await createPatient(h.owner, doctor, userY);
+    await createStudy(h.owner, patientX, doctor);
+    await createStudy(h.owner, patientY, doctor);
+
+    const seenByX = await asUser(h.app, { userId: userX, role: 'patient' }, async (c) => {
+      const r = await c.query<{ patient_id: string }>('SELECT patient_id FROM imaging_studies');
+      return r.rows.map((row) => row.patient_id);
+    });
+
+    expect(seenByX).toEqual([patientX]);
+    expect(seenByX).not.toContain(patientY);
+  });
+
+  it('3. Tunisian doctor with an appointment but NO consent sees nothing', async () => {
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const patient = await createPatient(h.owner, libyaDoctor);
+    const study = await createStudy(h.owner, patient, libyaDoctor);
+    const appt = await createAppointment(h.owner, patient, tunisDoctor, 'confirmed');
+    await linkStudy(h.owner, appt, study);
+    // Deliberately no consent record.
+
+    const rows = await asUser(h.app, { userId: tunisDoctor, role: 'tunisia_doctor' }, async (c) => {
+      const r = await c.query('SELECT id FROM imaging_studies');
+      return r.rowCount;
+    });
+    expect(rows).toBe(0);
+  });
+
+  it('4. Tunisian doctor with an appointment AND valid consent sees exactly one study', async () => {
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const patient = await createPatient(h.owner, libyaDoctor);
+    const study = await createStudy(h.owner, patient, libyaDoctor);
+    const appt = await createAppointment(h.owner, patient, tunisDoctor, 'confirmed');
+    await linkStudy(h.owner, appt, study);
+    await grantConsent(h.owner, patient, tunisDoctor);
+
+    const rows = await asUser(h.app, { userId: tunisDoctor, role: 'tunisia_doctor' }, async (c) => {
+      const r = await c.query<{ id: string }>('SELECT id FROM imaging_studies');
+      return r.rows.map((row) => row.id);
+    });
+    expect(rows).toEqual([study]);
+  });
+
+  it('5. revoking consent removes access immediately', async () => {
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const patient = await createPatient(h.owner, libyaDoctor);
+    const study = await createStudy(h.owner, patient, libyaDoctor);
+    const appt = await createAppointment(h.owner, patient, tunisDoctor, 'confirmed');
+    await linkStudy(h.owner, appt, study);
+    const consent = await grantConsent(h.owner, patient, tunisDoctor);
+
+    const before = await asUser(h.app, { userId: tunisDoctor, role: 'tunisia_doctor' }, async (c) =>
+      (await c.query('SELECT id FROM imaging_studies')).rowCount,
+    );
+    expect(before).toBe(1);
+
+    await revokeConsent(h.owner, consent);
+
+    const after = await asUser(h.app, { userId: tunisDoctor, role: 'tunisia_doctor' }, async (c) =>
+      (await c.query('SELECT id FROM imaging_studies')).rowCount,
+    );
+    expect(after).toBe(0);
+  });
+
+  it('6. the application role cannot escalate with SET ROLE postgres', async () => {
+    await expect(
+      asUser(h.app, { userId: await createUser(h.owner, 'admin'), role: 'admin' }, async (c) => {
+        await c.query('SET ROLE postgres');
+      }),
+    ).rejects.toThrow(/permission denied|must be (a )?member of role/i);
+  });
+
+  it('7. nobody can DELETE or UPDATE audit_events', async () => {
+    const admin = await createUser(h.owner, 'admin');
+    await h.owner.query(
+      `INSERT INTO audit_events (actor_id, actor_role, action, subject_type)
+       VALUES ($1, 'admin', 'StudyAccessed', 'study')`,
+      [admin],
+    );
+
+    // DELETE — permission denied at the GRANT level, before any policy runs.
+    await expect(
+      asUser(h.app, { userId: admin, role: 'admin' }, async (c) => {
+        await c.query('DELETE FROM audit_events');
+      }),
+    ).rejects.toThrow(/permission denied/i);
+
+    // UPDATE — same. P4.4 requires the log to be append-only, and "append-only"
+    // has to mean tamper-proof, not merely "we don't have an update endpoint".
+    await expect(
+      asUser(h.app, { userId: admin, role: 'admin' }, async (c) => {
+        await c.query("UPDATE audit_events SET action = 'tampered'");
+      }),
+    ).rejects.toThrow(/permission denied/i);
+
+    // The row survived both attempts.
+    const res = await h.owner.query<{ action: string }>('SELECT action FROM audit_events');
+    expect(res.rows[0]?.action).toBe('StudyAccessed');
+  });
+
+  // -------------------------------------------------------------------------
+  // DECISION D3 — the triage toggle, at the RLS layer (P10.3)
+  // -------------------------------------------------------------------------
+  describe('D3 triage gating', () => {
+    async function scenario(status: 'pending_payment' | 'confirmed') {
+      const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+      const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+      const patient = await createPatient(h.owner, libyaDoctor);
+      const study = await createStudy(h.owner, patient, libyaDoctor);
+      const appt = await createAppointment(h.owner, patient, tunisDoctor, status);
+      await linkStudy(h.owner, appt, study);
+      await grantConsent(h.owner, patient, tunisDoctor);
+      return { tunisDoctor };
+    }
+
+    it('triage OFF (default): unpaid appointment sees nothing', async () => {
+      const { tunisDoctor } = await scenario('pending_payment');
+      const rows = await asUser(
+        h.app,
+        { userId: tunisDoctor, role: 'tunisia_doctor', triageBeforePayment: false },
+        async (c) => (await c.query('SELECT id FROM imaging_studies')).rowCount,
+      );
+      expect(rows).toBe(0);
+    });
+
+    it('triage ON: unpaid appointment sees the study', async () => {
+      const { tunisDoctor } = await scenario('pending_payment');
+      const rows = await asUser(
+        h.app,
+        { userId: tunisDoctor, role: 'tunisia_doctor', triageBeforePayment: true },
+        async (c) => (await c.query('SELECT id FROM imaging_studies')).rowCount,
+      );
+      expect(rows).toBe(1);
+    });
+
+    it('triage ON still requires consent — the toggle never bypasses it', async () => {
+      const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+      const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+      const patient = await createPatient(h.owner, libyaDoctor);
+      const study = await createStudy(h.owner, patient, libyaDoctor);
+      const appt = await createAppointment(h.owner, patient, tunisDoctor, 'pending_payment');
+      await linkStudy(h.owner, appt, study);
+      // No consent.
+
+      const rows = await asUser(
+        h.app,
+        { userId: tunisDoctor, role: 'tunisia_doctor', triageBeforePayment: true },
+        async (c) => (await c.query('SELECT id FROM imaging_studies')).rowCount,
+      );
+      expect(rows).toBe(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Cases the seven imply but do not state
+  // -------------------------------------------------------------------------
+  describe('additional isolation', () => {
+    it('consent naming doctor A does not grant access to doctor B', async () => {
+      const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+      const doctorA = await createUser(h.owner, 'tunisia_doctor');
+      const doctorB = await createUser(h.owner, 'tunisia_doctor');
+      const patient = await createPatient(h.owner, libyaDoctor);
+      const study = await createStudy(h.owner, patient, libyaDoctor);
+
+      // Both doctors have an appointment; consent names only A.
+      const apptA = await createAppointment(h.owner, patient, doctorA, 'confirmed');
+      const apptB = await createAppointment(
+        h.owner,
+        patient,
+        doctorB,
+        'confirmed',
+        new Date(Date.now() + 172_800_000),
+      );
+      await linkStudy(h.owner, apptA, study);
+      await linkStudy(h.owner, apptB, study);
+      await grantConsent(h.owner, patient, doctorA);
+
+      const seenByA = await asUser(h.app, { userId: doctorA, role: 'tunisia_doctor' }, async (c) =>
+        (await c.query('SELECT id FROM imaging_studies')).rowCount,
+      );
+      const seenByB = await asUser(h.app, { userId: doctorB, role: 'tunisia_doctor' }, async (c) =>
+        (await c.query('SELECT id FROM imaging_studies')).rowCount,
+      );
+
+      expect(seenByA).toBe(1);
+      expect(seenByB).toBe(0);
+    });
+
+    it('a cancelled appointment revokes access even with valid consent', async () => {
+      const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+      const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+      const patient = await createPatient(h.owner, libyaDoctor);
+      const study = await createStudy(h.owner, patient, libyaDoctor);
+      const appt = await createAppointment(h.owner, patient, tunisDoctor, 'cancelled');
+      await linkStudy(h.owner, appt, study);
+      await grantConsent(h.owner, patient, tunisDoctor);
+
+      const rows = await asUser(h.app, { userId: tunisDoctor, role: 'tunisia_doctor' }, async (c) =>
+        (await c.query('SELECT id FROM imaging_studies')).rowCount,
+      );
+      expect(rows).toBe(0);
+    });
+
+    it('an unclaimed patient record is invisible to every patient account', async () => {
+      const doctor = await createUser(h.owner, 'libya_doctor');
+      const someUser = await createUser(h.owner, 'patient');
+      await createPatient(h.owner, doctor); // claimed_by_user IS NULL
+
+      const rows = await asUser(h.app, { userId: someUser, role: 'patient' }, async (c) =>
+        (await c.query('SELECT id FROM patients_patients')).rowCount,
+      );
+      expect(rows).toBe(0);
+    });
+
+    it('imaging_instances visibility follows the parent study', async () => {
+      const doctorA = await createUser(h.owner, 'libya_doctor');
+      const doctorB = await createUser(h.owner, 'libya_doctor');
+      const patient = await createPatient(h.owner, doctorB);
+      const study = await createStudy(h.owner, patient, doctorB);
+      await h.owner.query(
+        `INSERT INTO imaging_instances (study_id, sop_uid, series_uid, storage_key, size_bytes, sha256)
+         VALUES ($1, '1.2.3.4', '1.2.3', 'k', 100, $2)`,
+        [study, 'b'.repeat(64)],
+      );
+
+      const seenByA = await asUser(h.app, { userId: doctorA, role: 'libya_doctor' }, async (c) =>
+        (await c.query('SELECT id FROM imaging_instances')).rowCount,
+      );
+      const seenByB = await asUser(h.app, { userId: doctorB, role: 'libya_doctor' }, async (c) =>
+        (await c.query('SELECT id FROM imaging_instances')).rowCount,
+      );
+
+      expect(seenByA).toBe(0);
+      expect(seenByB).toBe(1);
+    });
+
+    it('a doctor cannot insert a study against another doctor patient', async () => {
+      const doctorA = await createUser(h.owner, 'libya_doctor');
+      const doctorB = await createUser(h.owner, 'libya_doctor');
+      const patientOfB = await createPatient(h.owner, doctorB);
+
+      await expect(
+        asUser(h.app, { userId: doctorA, role: 'libya_doctor' }, async (c) => {
+          await c.query(
+            `INSERT INTO imaging_studies (patient_id, uploaded_by, study_instance_uid, modality)
+             VALUES ($1, $2, '1.2.3.999', 'CT')`,
+            [patientOfB, doctorA],
+          );
+        }),
+      ).rejects.toThrow(/row-level security/i);
+    });
+
+    it('admins cannot read patient imaging (no routine access, §1.1)', async () => {
+      const doctor = await createUser(h.owner, 'libya_doctor');
+      const admin = await createUser(h.owner, 'admin');
+      const patient = await createPatient(h.owner, doctor);
+      await createStudy(h.owner, patient, doctor);
+
+      const rows = await asUser(h.app, { userId: admin, role: 'admin' }, async (c) =>
+        (await c.query('SELECT id FROM imaging_studies')).rowCount,
+      );
+      expect(rows).toBe(0);
+    });
+
+    it('the database rejects double-booking regardless of application logic', async () => {
+      const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+      const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+      const p1 = await createPatient(h.owner, libyaDoctor);
+      const p2 = await createPatient(h.owner, libyaDoctor);
+      const slot = new Date(Date.now() + 86_400_000);
+
+      await createAppointment(h.owner, p1, tunisDoctor, 'confirmed', slot);
+      await expect(
+        createAppointment(h.owner, p2, tunisDoctor, 'confirmed', slot),
+      ).rejects.toThrow(/exclusion constraint|conflicting key value/i);
+    });
+  });
+});
