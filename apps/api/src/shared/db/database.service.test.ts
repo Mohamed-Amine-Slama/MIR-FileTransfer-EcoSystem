@@ -41,7 +41,7 @@ beforeAll(async () => {
   h = await setupTestDatabase();
   db = new DatabaseService({
     DATABASE_URL: appUrl(),
-    DATABASE_POOL_MAX: 4,
+    DATABASE_POOL_MAX: 3,
   } as AppConfig);
 }, 120_000);
 

@@ -11,6 +11,15 @@ export default defineConfig({
     // default timeout, which would look like a flake rather than a failure.
     testTimeout: 30_000,
     hookTimeout: 60_000,
+
+    // Bound the worker count. Each worker opens its own test database and
+    // several connection pools; unbounded workers on a many-core machine
+    // exhaust PostgreSQL's max_connections, and the symptom is a beforeAll
+    // that cannot connect — which Vitest reports as SKIPPED tests, not failed
+    // ones. A silently skipped row-level-security test is indistinguishable
+    // from a passing one in a green build.
+    maxWorkers: 4,
+    minWorkers: 1,
   },
   plugins: [
     // Vitest's esbuild transform supports `experimentalDecorators` but NOT

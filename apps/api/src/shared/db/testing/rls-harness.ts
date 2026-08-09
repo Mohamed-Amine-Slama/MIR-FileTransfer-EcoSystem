@@ -93,7 +93,9 @@ export async function setupTestDatabase(): Promise<Harness> {
   // The migration deliberately creates the role NOLOGIN with no password, so
   // no credential is committed (§6). Attaching one is an environment concern:
   // Terraform + Secrets Manager in deployed environments, here in tests.
-  const owner = new Pool({ connectionString: ownerUrl(TEST_DB), max: 4 });
+  // Small pools: several suites run concurrently, each against its own
+  // database, and PostgreSQL's connection budget is shared across all of them.
+  const owner = new Pool({ connectionString: ownerUrl(TEST_DB), max: 2 });
   await owner.query(`ALTER ROLE mir_app LOGIN PASSWORD '${APP_PASSWORD}'`);
 
   // Baseline reference data: consent_records carries a foreign key to
@@ -114,7 +116,7 @@ export async function setupTestDatabase(): Promise<Harness> {
     ],
   );
 
-  const app = new Pool({ connectionString: appUrl(TEST_DB), max: 4 });
+  const app = new Pool({ connectionString: appUrl(TEST_DB), max: 2 });
 
   return {
     owner,

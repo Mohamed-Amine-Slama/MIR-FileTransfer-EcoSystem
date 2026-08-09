@@ -47,7 +47,7 @@ const baseEvent = (actorId: string, role: string) => ({
 
 beforeAll(async () => {
   h = await setupTestDatabase();
-  db = new DatabaseService({ DATABASE_URL: appUrl(), DATABASE_POOL_MAX: 4 } as AppConfig);
+  db = new DatabaseService({ DATABASE_URL: appUrl(), DATABASE_POOL_MAX: 3 } as AppConfig);
   audit = new AuditService(db);
 }, 120_000);
 

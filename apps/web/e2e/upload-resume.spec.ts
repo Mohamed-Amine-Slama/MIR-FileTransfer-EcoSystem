@@ -1,7 +1,7 @@
 import { chromium, expect, test, type BrowserContext, type Route } from '@playwright/test';
 import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -171,10 +171,12 @@ async function makeStudyFolder(): Promise<{ dir: string; expectedFiles: number }
 
   const fileCount = 6;
   for (let i = 1; i <= fileCount; i++) {
-    // ~120 KB each => ~8 chunks per file at 16 KB, enough to interrupt within.
-    const body = Buffer.alloc(120 * 1024);
-    body.write('DICM-ish payload', 128);
-    body[1000 + i] = i;
+    // Random bytes, NOT zero-filled: the client gzips before transfer, and a
+    // zero-filled buffer compresses to a couple of hundred bytes, so the whole
+    // "large upload" would finish in one chunk per file and there would be
+    // nothing to interrupt. Real DICOM pixel data is close to incompressible,
+    // which is what this reproduces.
+    const body = Buffer.concat([Buffer.alloc(128), Buffer.from('DICM'), randomBytes(120 * 1024)]);
     // Extensionless, as clinic CDs actually are.
     await writeFile(join(dicomDir, `IM${String(i).padStart(6, '0')}`), body);
   }
@@ -260,7 +262,7 @@ test.describe('P7.3 persistent upload queue', () => {
 
       // The resume SAVED work: total bytes received is far below what a full
       // restart-from-zero would have cost.
-      const originalTotal = expectedFiles * 120 * 1024;
+      const originalTotal = expectedFiles * (120 * 1024 + 132);
       expect(server.totalChunkBytesReceived).toBeLessThan(originalTotal);
       expect(bytesBeforeCrash).toBeGreaterThan(0);
 

@@ -1,3 +1,4 @@
+import { gunzipSync } from 'node:zlib';
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { sha256 } from '@mir/dicom-utils';
 import { APP_CONFIG } from '../../../shared/config/config.module';
@@ -36,8 +37,16 @@ export interface RegisterFileInput {
   /** Stable client-side id, e.g. a hash of the file's path in the folder. */
   clientFileId: string;
   fileName: string;
+  /** Size of the ORIGINAL file, before any transfer encoding. */
   sizeBytes: number;
+  /** SHA-256 of the ORIGINAL file, before any transfer encoding. */
   sha256: string;
+  /**
+   * Transfer encoding of the chunks that will follow (P7.3 step 4).
+   * 'gzip' is container-level compression only — it never alters pixel data
+   * or the DICOM transfer syntax (ADR-5).
+   */
+  contentEncoding?: 'identity' | 'gzip';
 }
 
 export interface FileUploadState {
@@ -166,8 +175,9 @@ export class UploadService {
 
       const inserted = await tx.query<{ id: string }>(
         `INSERT INTO imaging_upload_files
-           (session_id, client_file_id, file_name, size_bytes, client_sha256, chunk_size_bytes)
-         VALUES ($1, $2, $3, $4, $5, $6)
+           (session_id, client_file_id, file_name, size_bytes, client_sha256,
+            chunk_size_bytes, content_encoding)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id`,
         [
           input.sessionId,
@@ -176,6 +186,7 @@ export class UploadService {
           input.sizeBytes,
           input.sha256,
           chunkSize,
+          input.contentEncoding ?? 'identity',
         ],
       );
       const row = inserted.rows[0];
@@ -255,6 +266,11 @@ export class UploadService {
       if (Number(file.received_bytes) + data.byteLength > Number(file.size_bytes)) {
         // More bytes than the client declared. Refusing here bounds how much
         // storage one session can consume regardless of what the client does.
+        //
+        // Safe for gzip too: compressed output is smaller than the original for
+        // DICOM (the pixel data dominates and is not already compressed), so
+        // the original size is a valid upper bound. A client sending MORE
+        // compressed bytes than the original size is either broken or hostile.
         throw new BadRequestException('Chunk exceeds the declared file size');
       }
 
@@ -293,7 +309,8 @@ export class UploadService {
    * permanently: the usual cause is a corrupted transfer, which a retry fixes.
    */
   async completeFile(fileId: string): Promise<{ verified: true; sha256: string }> {
-    const { sessionId, clientFileId, expectedSha, sizeBytes, receivedBytes } = await this.db.tx(
+    const { sessionId, clientFileId, expectedSha, sizeBytes, receivedBytes, contentEncoding } =
+      await this.db.tx(
       async (tx) => {
         const res = await tx.query<FileRow>(`SELECT * FROM imaging_upload_files WHERE id = $1`, [
           fileId,
@@ -306,32 +323,54 @@ export class UploadService {
           expectedSha: row.client_sha256,
           sizeBytes: Number(row.size_bytes),
           receivedBytes: Number(row.received_bytes),
+          contentEncoding: row.content_encoding,
         };
       },
     );
 
-    if (receivedBytes !== sizeBytes) {
+    // A gzipped transfer's byte count does not match the original size, so
+    // completeness is judged after decoding instead.
+    if (contentEncoding === 'identity' && receivedBytes !== sizeBytes) {
       throw new BadRequestException(
         `File is incomplete: ${receivedBytes} of ${sizeBytes} bytes received`,
       );
     }
 
     const key = stagingKey(sessionId, clientFileId);
-    const bytes = await this.blobs.readStaged(key);
+    const staged = await this.blobs.readStaged(key);
+
+    // Decode BEFORE hashing: client_sha256 is the digest of the original file
+    // (ADR-4). Verifying the compressed bytes would prove only that the gzip
+    // survived, not that the DICOM inside it did.
+    let bytes: Uint8Array;
+    try {
+      bytes = contentEncoding === 'gzip' ? new Uint8Array(gunzipSync(staged)) : staged;
+    } catch {
+      await this.blobs.discardStaged(key);
+      await this.resetForRetry(fileId, 'malformed_gzip');
+      throw new BadRequestException('Uploaded data could not be decompressed');
+    }
+
+    if (bytes.byteLength !== sizeBytes) {
+      throw new BadRequestException(
+        `File is incomplete: ${bytes.byteLength} of ${sizeBytes} bytes after decoding`,
+      );
+    }
+
     const actual = sha256(bytes);
 
     if (actual !== expectedSha) {
       await this.blobs.discardStaged(key);
-      await this.db.tx(async (tx) => {
-        await tx.query(
-          `UPDATE imaging_upload_files
-           SET status = 'pending', received_bytes = 0, next_chunk_index = 0,
-               server_sha256 = $1, failure_reason = 'checksum_mismatch', updated_at = now()
-           WHERE id = $2`,
-          [actual, fileId],
-        );
-      });
+      await this.resetForRetry(fileId, 'checksum_mismatch', actual);
       throw new ChecksumMismatchError(expectedSha, actual);
+    }
+
+    // Replace the staged payload with the DECODED original, so everything
+    // downstream (ingestion, storage, Orthanc) sees the real DICOM bytes and
+    // never has to know a transfer encoding was involved.
+    if (contentEncoding === 'gzip') {
+      await this.blobs.discardStaged(key);
+      await this.blobs.appendChunk(key, 0, bytes);
     }
 
     await this.db.tx(async (tx) => {
@@ -344,6 +383,23 @@ export class UploadService {
     });
 
     return { verified: true, sha256: actual };
+  }
+
+  /** Reset a file so the client can retry from zero. */
+  private async resetForRetry(
+    fileId: string,
+    reason: string,
+    serverSha?: string,
+  ): Promise<void> {
+    await this.db.tx(async (tx) => {
+      await tx.query(
+        `UPDATE imaging_upload_files
+         SET status = 'pending', received_bytes = 0, next_chunk_index = 0,
+             server_sha256 = $1, failure_reason = $2, updated_at = now()
+         WHERE id = $3`,
+        [serverSha ?? null, reason, fileId],
+      );
+    });
   }
 
   private async assertSessionOpen(
@@ -379,6 +435,7 @@ interface FileRow {
   received_bytes: string;
   next_chunk_index: number;
   status: string;
+  content_encoding: 'identity' | 'gzip';
 }
 
 export function stagingKey(sessionId: string, clientFileId: string): string {

@@ -75,7 +75,7 @@ const as = (server: unknown, userId: string, role: Role) => ({
 
 beforeAll(async () => {
   h = await setupTestDatabase();
-  db = new DatabaseService({ DATABASE_URL: appUrl(), DATABASE_POOL_MAX: 6 } as AppConfig);
+  db = new DatabaseService({ DATABASE_URL: appUrl(), DATABASE_POOL_MAX: 3 } as AppConfig);
 
   @Module({
     controllers: [PatientsController],

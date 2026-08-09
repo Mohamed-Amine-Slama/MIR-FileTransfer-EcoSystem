@@ -57,7 +57,7 @@ async function publishTerms(version: string, locale: 'ar' | 'fr', body: string):
 
 beforeAll(async () => {
   h = await setupTestDatabase();
-  db = new DatabaseService({ DATABASE_URL: appUrl(), DATABASE_POOL_MAX: 4 } as AppConfig);
+  db = new DatabaseService({ DATABASE_URL: appUrl(), DATABASE_POOL_MAX: 3 } as AppConfig);
   bus = new EventBus();
   consent = new ConsentService(db, bus);
 

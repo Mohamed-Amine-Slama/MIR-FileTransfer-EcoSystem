@@ -64,6 +64,13 @@ export const configSchema = z.object({
   S3_BUCKET_DERIVED: nonEmpty('S3_BUCKET_DERIVED'),
   S3_BUCKET_AUDIT_LOGS: nonEmpty('S3_BUCKET_AUDIT_LOGS'),
 
+  // --- local storage (development only) ------------------------------------
+  // Root directory for the filesystem BlobStore. Ignored outside development:
+  // StorageModule refuses to start in staging or production without a real
+  // S3-backed store, because originals on a container filesystem are one
+  // restart away from being lost (ADR-4, P2.4).
+  LOCAL_STORAGE_ROOT: z.string().optional(),
+
   // --- DICOM server (P8.1) -------------------------------------------------
   ORTHANC_URL: z.string().url('ORTHANC_URL must be a URL'),
   ORTHANC_USERNAME: nonEmpty('ORTHANC_USERNAME'),

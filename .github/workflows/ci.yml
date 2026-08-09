@@ -168,8 +168,13 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # Built before the Playwright job so a slow build cannot surface as a
+      # webServer timeout.
+      - name: Build web app
+        run: pnpm --filter @mir/web... build
+
       - name: Install Playwright browsers
-        run: pnpm --filter @mir/web exec playwright install --with-deps chromium
+        run: pnpm --filter @mir/web exec playwright install --with-deps chromium chromium-headless-shell
 
       - name: Run e2e
         run: pnpm --filter @mir/web test:e2e
