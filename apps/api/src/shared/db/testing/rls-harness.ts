@@ -26,19 +26,27 @@ const PORT = process.env['TEST_PG_PORT'] ?? '5433';
 const SUPERUSER = process.env['TEST_PG_SUPERUSER'] ?? 'postgres';
 const SUPERPASS = process.env['TEST_PG_SUPERPASS'] ?? 'postgres';
 /**
- * One database PER VITEST WORKER.
+ * One database per test WORKER, namespaced by process id.
  *
- * Test files run in parallel workers, and every DB suite truncates in
- * beforeEach. Sharing a single database means suite A wipes suite B's fixtures
- * mid-test, producing foreign-key and RLS failures that look like real
- * authorization bugs and move around between runs.
+ * Two levels of collision are possible and both have bitten:
  *
- * Isolating per worker keeps the parallelism (these suites are slow) while
- * making each one deterministic. Files that share a worker run sequentially,
- * so truncation between them is safe.
+ *  1. Within one Vitest process, test files run in parallel workers and every
+ *     DB suite truncates in beforeEach — so a shared database means suite A
+ *     wipes suite B's fixtures mid-test. The failures look like real
+ *     authorization bugs (foreign key violations, "not found" on a row that
+ *     was just created) and they move around between runs.
+ *
+ *  2. `pnpm -r test` starts a SEPARATE Vitest process per workspace package,
+ *     and each numbers its workers from 1. Worker-id alone therefore collides
+ *     across processes, which is how an upload test failed once inside
+ *     `pnpm verify` while passing every time on its own.
+ *
+ * Including the process id closes the second. Stale databases are dropped by
+ * `pnpm db:clean`.
  */
 const WORKER_ID = process.env['VITEST_WORKER_ID'] ?? '1';
-const TEST_DB = process.env['TEST_PG_DATABASE'] ?? `mir_test_${WORKER_ID}`;
+const TEST_DB =
+  process.env['TEST_PG_DATABASE'] ?? `mir_test_${process.pid}_${WORKER_ID}`;
 
 /** Local test-only credential. Never used outside the test database. */
 const APP_PASSWORD = process.env['TEST_PG_APP_PASSWORD'] ?? 'mir_app_test_pw';

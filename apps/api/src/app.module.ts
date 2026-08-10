@@ -9,8 +9,10 @@ import { DatabaseModule } from './shared/db/database.module';
 import { GlobalExceptionFilter } from './shared/errors/global-exception.filter';
 import { EventsModule } from './shared/events/events.module';
 import { AuditModule } from './modules/audit';
+import { BillingModule } from './modules/billing';
 import { ConsentModule } from './modules/consent';
 import { ImagingModule } from './modules/imaging';
+import { NotificationsModule } from './modules/notifications';
 import { PatientsModule } from './modules/patients';
 import { SchedulingModule } from './modules/scheduling';
 
@@ -35,6 +37,8 @@ import { SchedulingModule } from './modules/scheduling';
     ConsentModule,
     ImagingModule,
     SchedulingModule,
+    BillingModule,
+    NotificationsModule,
   ],
   providers: [
     TokenVerifier,

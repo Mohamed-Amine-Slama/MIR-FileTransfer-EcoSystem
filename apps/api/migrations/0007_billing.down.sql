@@ -1,0 +1,10 @@
+BEGIN;
+DROP POLICY IF EXISTS payments_system_update ON billing_payments;
+DROP POLICY IF EXISTS webhook_events_system ON billing_webhook_events;
+DROP POLICY IF EXISTS payments_admin ON billing_payments;
+DROP POLICY IF EXISTS payments_patient_insert ON billing_payments;
+DROP POLICY IF EXISTS payments_patient ON billing_payments;
+REVOKE ALL ON billing_payments, billing_webhook_events FROM mir_app;
+DROP TABLE IF EXISTS billing_webhook_events;
+DROP TABLE IF EXISTS billing_payments;
+COMMIT;

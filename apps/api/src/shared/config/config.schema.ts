@@ -106,6 +106,18 @@ export const configSchema = z.object({
     720,
   ).default('72'),
 
+  // --- billing (DECISION D2a: Stripe) -------------------------------------
+  // Secret key and webhook secret come from AWS Secrets Manager (§6) and are
+  // never in the bundle — scripts/check-bundle-secrets.mjs fails the build if
+  // either appears in client output.
+  //
+  // Optional so the app boots in development without a Stripe account; the
+  // billing module refuses to authorise a payment when they are absent, rather
+  // than failing at the moment a patient tries to pay.
+  STRIPE_SECRET_KEY: z.string().startsWith('sk_').optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().startsWith('whsec_').optional(),
+  PAYMENT_CURRENCY: z.string().regex(/^[A-Z]{3}$/, 'PAYMENT_CURRENCY must be ISO-4217').default('TND'),
+
   // --- retention (BLOCKING L5) --------------------------------------------
   // These values are placeholders until counsel answers L5. They are config
   // precisely so the legal answer is a deployment change, not a rewrite.

@@ -1,12 +1,11 @@
 /**
  * Public API of the `notifications` module (BUILD_SPEC §5.1).
  *
- * Everything another module is allowed to touch is re-exported here. Anything
- * under `internal/` is private and importing it from outside this directory
- * fails the build (P1.4).
- *
- * Cross-module calls go through this file or through domain events (§5.2).
- * There is no third option — in particular, no module may query another
- * module's tables directly.
+ * The renderer is exported so its guarantees can be reused and tested, but
+ * there is no exported "send arbitrary text" function: every message must go
+ * through a declared template, which is what keeps clinical detail out of SMS
+ * (PHASE 12).
  */
-export {};
+export { render, TEMPLATES, DisallowedTemplateVariableError } from './internal/templates';
+export type { TemplateId, TemplateVariables, Channel } from './internal/templates';
+export { NotificationsModule } from './notifications.module';
