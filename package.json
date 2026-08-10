@@ -22,7 +22,8 @@
     "db:down": "docker compose down",
     "verify": "pnpm check:synthetic && pnpm typecheck && pnpm lint && pnpm boundaries && pnpm boundaries:verify && pnpm test && pnpm build && pnpm check:bundle",
     "check:bundle": "node scripts/check-bundle-secrets.mjs",
-    "db:clean": "node scripts/clean-test-databases.mjs"
+    "db:clean": "node scripts/clean-test-databases.mjs",
+    "verify:gates": "node scripts/verify-gates.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",

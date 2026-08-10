@@ -117,6 +117,43 @@ jobs:
         run: pnpm build
 
   # --------------------------------------------------------------------------
+  # P14.2 — dependency and container scanning. Fails the build on high/critical.
+  # --------------------------------------------------------------------------
+  vulnerabilities:
+    name: Dependency scan (P14.2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # A known-vulnerable dependency must block the build, not warn.
+      # `pnpm audit` exits non-zero when findings at or above the level exist.
+      - name: Audit dependencies (high and critical)
+        run: pnpm audit --audit-level high
+
+      # Filesystem scan catches transitive issues the registry audit misses,
+      # and covers non-npm files (lockfiles, Dockerfiles).
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+
+  # --------------------------------------------------------------------------
   # P1.4 — module boundaries. Separate job so a boundary violation is
   # immediately legible in the checks list rather than buried in a lint log.
   # --------------------------------------------------------------------------
