@@ -106,8 +106,9 @@ Beyond the legal and infrastructure blockers above:
 - **Cornerstone3D is not installed.** The viewer renders thumbnails, which is
   what meets the <5s first-image gate; full-fidelity frame rendering is not
   implemented.
-- **OpenTelemetry tracing is not instrumented.** Log scrubbing is done and
-  verified; distributed traces are not.
+- **No trace collector is wired.** Span creation, naming and redaction are
+  implemented and tested (API → DB → Orthanc → S3 under one trace id); the
+  exporter writes JSON rather than shipping to an OTLP endpoint.
 - **No notification delivery provider** is wired. Templates and the
   no-clinical-data guarantee are built and tested.
 - **A patient name in free-text logs cannot be scrubbed** when there is no

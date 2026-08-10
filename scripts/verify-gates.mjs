@@ -53,7 +53,7 @@ const GATES = [
   ['P11.1', 'Payment rail confirmed viable', 'blocked', 'L7 + Stripe entity jurisdiction'],
   ['P11.2', 'Idempotency + out-of-order webhooks', 'verified', '10 replays -> 1 state change'],
   ['P12', 'No clinical data in notifications', 'verified', 'type-level + render-time + vocabulary scan'],
-  ['P13', 'Log scrubbing verified', 'verified', 'one documented limitation'],
+  ['P13', 'Log scrubbing + tracing', 'verified', 'one documented limitation; no collector wired'],
   ['P14.1', 'No standing production access', 'blocked', 'no production'],
   ['P14.2', 'Vulnerable dependency blocks build', 'partial', 'job added; not demonstrated red'],
   ['P14.3', 'Edge protection, headers grade A', 'open', 'Cloudflare not configured'],
