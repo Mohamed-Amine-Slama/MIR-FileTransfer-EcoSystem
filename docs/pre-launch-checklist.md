@@ -34,10 +34,20 @@ when its verification was executed and the result observed.
 | Retention periods configured to match L5 | 🔒 open | Config keys exist with **placeholder** values. Object Lock retention is **irreversible** — do not apply a guess |
 | DPA/BAA-equivalent signed with cloud provider | 🔒 open | No account exists |
 
-**Also unresolved and specific to the payment decision (D2a):** Stripe requires
-the business to be established in a supported country. Neither Libya nor
-Tunisia appears to be on that list. This is a corporate-structure question that
-must be settled before any real payment.
+**Payment entity — RESOLVED (2026-08-10):** the business is incorporated in
+**Estonia**, which Stripe supports. D2's authorise-then-capture works as built.
+
+**Two obligations that follow from that, and are now open items:**
+
+| Item | Status | Notes |
+|---|---|---|
+| DPA signed with AWS (GDPR Art 28) | 🔒 open | L3 is now unconditional, not conditional |
+| **SCCs with each Tunisian doctor/clinic** | 🔒 **open** | Tunisia has no EU adequacy decision. A Tunisian doctor viewing EU-hosted data is a Chapter V restricted transfer |
+| Transfer impact assessment | 🔒 open | Accompanies the SCCs |
+| Breach notification assumed at 72h (GDPR Art 33) | ⚠️ | Supersedes the "unknown" in the incident runbook unless L8 finds something stricter |
+
+**Product consequence:** a Tunisian doctor must not be verified/activated until
+their SCCs are signed. `identity_doctor_profiles.verified_at` is the gate.
 
 ---
 

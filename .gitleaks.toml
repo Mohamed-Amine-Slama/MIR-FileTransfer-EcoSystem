@@ -31,6 +31,7 @@ tags = ["mir", "orthanc"]
     '''change-me''',
     '''CHANGE_ME''',
     '''local-dev-only''',
+    '''unused''',
   ]
 
 [[rules]]
@@ -38,7 +39,12 @@ id = "mir-postgres-url-with-password"
 description = "PostgreSQL connection string containing a password"
 # gitleaks uses RE2, which has no negative lookahead. Placeholder values are
 # excluded by the rule-level allowlist below rather than inside the pattern.
-regex = '''postgres(?:ql)?://[^:/\s]+:[^@\s]{6,}@'''
+#
+# `$`, `{` and `}` are excluded from BOTH segments so a template string like
+#   `postgres://${USER}:${PASS}@${HOST}/${db}`
+# does not match. That is code assembling a URL at runtime, not a credential —
+# and it appeared in three files, which is enough noise to get a rule muted.
+regex = '''postgres(?:ql)?://[^:/\s${}]+:[^@\s${}]{6,}@'''
 tags = ["mir", "database"]
 
   [rules.allowlist]
@@ -54,6 +60,21 @@ tags = ["mir", "database"]
 [allowlist]
 description = "Paths that cannot contain real secrets"
 
+# Values that are FABRICATED test fixtures, not credentials.
+#
+# Allowlisted by exact value rather than by exempting whole files: the point of
+# committing these strings is that they are credential-SHAPED, so the tests
+# using them prove the real checks work. Matching the literal keeps the
+# surrounding file scanned normally.
+regexTarget = "match"
+regexes = [
+  # HMAC key used by the P8.2 signed-URL tests. 32+ chars by design, because
+  # the config schema rejects anything shorter — which is what makes it look
+  # like a real key to an entropy heuristic.
+  '''test-signing-key-at-least-32-characters-long''',
+  '''unused-test-signing-key-at-least-32-chars''',
+]
+
 paths = [
   # Synthetic DICOM. These are binary pixel-data blobs and trip entropy
   # heuristics constantly. They are protected instead by check-synthetic.mjs,
@@ -62,6 +83,23 @@ paths = [
 
   # Lockfiles contain integrity hashes, not secrets.
   '''pnpm-lock\.yaml$''',
+
+  # PHASE 13 scrubbing gate. This file contains FABRICATED credential-shaped
+  # strings whose only purpose is to be redacted by the code under test:
+  # a made-up Stripe key, a made-up AWS key id, the jwt.io example token, and a
+  # postgres URL pointing at a non-existent host. None of them authenticate
+  # against anything.
+  #
+  # The scanner was flagging the very payloads that prove redaction works.
+  # Deleting them would delete the evidence for the P13 gate, so the file is
+  # exempted instead.
+  #
+  # TRADE-OFF, accepted knowingly: a REAL secret pasted into this file in
+  # future will not be caught. That is why the exemption is scoped to this one
+  # path and not to `**/*.test.ts`. (.env.example is deliberately NOT exempt
+  # for the same reason — it is committed, so a real value landing there is
+  # exactly the mistake this scan exists to catch.)
+  '''^apps/api/src/shared/observability/log-scrubber\.test\.ts$''',
 
   # Build output. Gitignored, so it can never be committed, but `gitleaks dir`
   # walks the filesystem rather than the index and would otherwise flag Next.js

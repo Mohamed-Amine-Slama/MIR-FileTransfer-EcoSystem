@@ -95,10 +95,18 @@ In this order:
 
 ### 4. Decide on notification (with counsel)
 
-**BLOCKING L8 — the deadlines for Libya and Tunisia are NOT established.**
-This is the single most time-critical unknown in this runbook. Until counsel
-answers, assume the shortest plausible clock (GDPR's 72 hours) and escalate
-immediately.
+**Assume 72 hours (GDPR Article 33).** The entity is Estonian, so GDPR applies
+directly and the supervisory authority is the Estonian **Andmekaitse
+Inspektsioon (AKI)**. The clock starts when the controller becomes *aware* of
+the breach, not when the investigation concludes.
+
+**L8 remains open only in one direction:** whether Libya or Tunisia imposes
+anything *stricter or additional*. Do not wait for that answer before starting
+the 72-hour clock.
+
+Health imaging is Article 9 special-category data, so where the breach is
+likely to result in high risk, Article 34 also requires notifying the affected
+individuals **without undue delay** — not only the regulator.
 
 Inputs counsel needs: number of data subjects, categories of data (medical
 imaging = special category), whether access was achieved or attempted,

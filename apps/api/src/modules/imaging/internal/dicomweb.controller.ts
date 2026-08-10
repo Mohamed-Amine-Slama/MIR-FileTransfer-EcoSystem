@@ -163,6 +163,60 @@ export class DicomWebController {
   }
 
   /**
+   * WADO-RS frame retrieval — what Cornerstone3D's `wadors:` loader fetches
+   * (P9.1).
+   *
+   * Returns multipart/related containing the raw frame. Authorised and audited
+   * exactly like every other route here: the viewer gets no privileged path,
+   * and a doctor scrolling through a series produces one audit row per frame
+   * they actually look at.
+   */
+  @RequiresRole('tunisia_doctor', 'libya_doctor', 'patient')
+  @Get('studies/:studyUid/instances/:sopUid/frames/:frame')
+  async frames(
+    @Param('studyUid') studyUid: string,
+    @Param('sopUid') sopUid: string,
+    @Param('frame') frame: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    await this.access.authoriseStudyAccess(studyUid, 'pixel_data');
+
+    // Frame numbers are 1-based in DICOMweb. Reject anything else rather than
+    // passing a caller-controlled string into the upstream URL.
+    if (!/^[1-9]\d{0,4}$/.test(frame)) {
+      throw new NotFoundException('Frame not found');
+    }
+
+    const upstream = await this.orthanc.retrieve(
+      `/dicom-web/studies/${encodeURIComponent(studyUid)}` +
+        `/instances/${encodeURIComponent(sopUid)}` +
+        `/frames/${encodeURIComponent(frame)}`,
+      'multipart/related; type="application/octet-stream"',
+    );
+
+    if (!upstream.ok || upstream.body === null) {
+      res.status(404).json({ statusCode: 404, message: 'Frame not found' });
+      return;
+    }
+
+    res.status(200);
+    res.setHeader(
+      'content-type',
+      upstream.headers.get('content-type') ?? 'multipart/related',
+    );
+    // Pixel data must never sit in a shared cache.
+    res.setHeader('cache-control', 'no-store, private');
+
+    const reader = upstream.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      res.write(Buffer.from(value));
+    }
+    res.end();
+  }
+
+  /**
    * Issue a short-lived, subject-bound URL for direct retrieval (P8.2).
    *
    * The viewer uses this for progressive frame loading (P9) so it can fetch

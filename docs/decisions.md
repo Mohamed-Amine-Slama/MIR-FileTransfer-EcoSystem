@@ -62,16 +62,51 @@ hold at booking, capture when the Tunisian doctor accepts. It also keeps the
 platform out of PCI scope via Stripe Elements / Payment Intents, satisfying
 P11.2 rule 1.
 
-**UNRESOLVED, and it is not a technical problem (BLOCKING L7):**
+### Entity jurisdiction — RESOLVED: Estonia
 
-Stripe requires the *business* to be legally established in a country it
-supports. To the best of my knowledge **neither Libya nor Tunisia is on
-Stripe's supported-country list for opening an account** — this needs
-confirming against Stripe's current list, because it decides the corporate
-structure, not the code. If it holds, the platform entity has to be
-incorporated in a supported jurisdiction (an EU country, the UK, etc.) with
-payouts routed to Tunisia, which carries its own tax and regulatory
-consequences and must be reviewed by counsel.
+**Decision (2026-08-10): the business is incorporated in Estonia**, not in
+Libya or Tunisia.
+
+This resolves the blocker. Estonia is an EU/EEA member and **is** on Stripe's
+supported-country list, so the merchant side works and auth/capture is
+available — D2 stands as written, and the Stripe implementation already built
+is the right one.
+
+**But incorporating in the EU changes the data-protection picture, and two
+consequences follow immediately:**
+
+**1. GDPR now applies directly — L3 is live, not hypothetical.**
+The spec listed L3 as conditional ("*if* hosting in the EU"). With an Estonian
+controller and EU hosting, it is unconditional. Health imaging is **Article 9
+special-category data**, which needs an Article 9(2) condition — most likely
+explicit consent, which the consent module already captures with evidence,
+versioning and a rendered-text hash. The supervisory authority is the Estonian
+**Andmekaitse Inspektsioon (AKI)**. A DPA with AWS is required (they offer a
+standard one). Breach notification becomes **72 hours** under Article 33 —
+which is almost certainly the binding deadline for L8, and is the number the
+incident-response runbook should now assume.
+
+**2. ⚠️ The Tunisian doctor's access is a restricted transfer.**
+
+This is the consequence most easily missed. If the data is hosted in the EU and
+a doctor **in Tunisia** logs in and views a study, that is a transfer to a
+third country under GDPR Chapter V. **Tunisia has no EU adequacy decision.**
+
+So the transfer needs an Article 46 safeguard — in practice Standard
+Contractual Clauses between the Estonian entity and the receiving Tunisian
+doctor or clinic, plus a transfer impact assessment. That is a contract each
+receiving doctor must sign before they can be granted access.
+
+**Product consequence, and the reason this is recorded here rather than only in
+a legal file:** doctor onboarding is no longer just licence verification
+(P4.1). A Tunisian doctor cannot be verified and activated until the SCCs are
+signed. `identity_doctor_profiles.verified_at` should not be set without it.
+This is cheap to build now and expensive to retrofit once doctors are onboarded.
+
+**Still for counsel:** whether the Libya → EU leg needs anything on the Libyan
+side (L1), whether an EU-established platform serving Tunisian clinicians
+triggers Tunisian registration anyway (L2), and confirmation of the SCC module
+and TIA above.
 
 Separately, on the paying side: Libyan-issued cards that work on international
 rails are uncommon, and Libya is subject to sanctions screening that Stripe
