@@ -73,7 +73,10 @@ const CLINICAL_VOCABULARY = [
  * script cannot appear accidentally inside a French or English word anyway.
  */
 function mentions(haystack: string, term: string): boolean {
-  const isLatin = /^[\x00-\x7F\s'-]+$/.test(term);
+  // Codepoint check rather than a regex range: a range starting at \x00 is a
+  // control-character class, which lint (rightly) rejects as almost always a
+  // mistake.
+  const isLatin = [...term].every((ch) => (ch.codePointAt(0) ?? 0) < 128);
   if (!isLatin) return haystack.includes(term);
   const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`\\b${escaped}\\b`, 'i').test(haystack);
@@ -153,7 +156,7 @@ describe('PHASE 12 notification templates', () => {
     expect(() =>
       render('upload_complete', 'sms', 'fr', {
         fileCount: '120',
-        // @ts-expect-error
+        // @ts-expect-error — TemplateVariables has no clinical fields by design
         diagnosis: 'suspected fracture',
       }),
     ).toThrow(/never include clinical details/);
