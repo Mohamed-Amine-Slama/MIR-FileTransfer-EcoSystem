@@ -9,7 +9,9 @@
 export { SchedulingService, SlotUnavailableError } from './internal/scheduling.service';
 export type {
   Appointment,
+  AppointmentSummary,
   AvailabilityWindow,
   BookingInput,
+  DoctorSummary,
 } from './internal/scheduling.service';
 export { SchedulingModule } from './scheduling.module';

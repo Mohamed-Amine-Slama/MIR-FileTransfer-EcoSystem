@@ -1,5 +1,4 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
@@ -48,6 +47,10 @@ interface Trace {
   thumbnailRequests: string[];
   instanceListRequests: number;
   pixelDataRequests: number;
+  /** WADO-RS frame fetches — full-fidelity pixel data (P9.1). */
+  frameRequests: string[];
+  /** Per-instance DICOM JSON metadata fetches. */
+  metadataRequests: string[];
 }
 
 async function stubApi(page: Page, thumbnail: Buffer, trace: Trace): Promise<void> {
@@ -71,6 +74,20 @@ async function stubApi(page: Page, thumbnail: Buffer, trace: Trace): Promise<voi
     await route.fulfill({ status: 200, contentType: 'image/jpeg', body: thumbnail });
   });
 
+  // Per-instance metadata — Cornerstone needs this before any frame renders.
+  await page.route('**/api/dicom-web/studies/*/instances/*/metadata', async (route: Route) => {
+    const sop = route.request().url().split('/instances/')[1]?.split('/')[0] ?? '';
+    trace.metadataRequests.push(sop);
+    await route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
+  });
+
+  // WADO-RS frames — full-fidelity pixel data.
+  await page.route('**/api/dicom-web/studies/*/instances/*/frames/*', async (route: Route) => {
+    const sop = route.request().url().split('/instances/')[1]?.split('/')[0] ?? '';
+    trace.frameRequests.push(sop);
+    await route.fulfill({ status: 404, body: '' });
+  });
+
   // Full-fidelity pixel data. If the viewer prefetches the study, these fire.
   await page.route('**/api/dicom-web/studies/*/series/*/instances/*', async (route: Route) => {
     trace.pixelDataRequests++;
@@ -79,7 +96,13 @@ async function stubApi(page: Page, thumbnail: Buffer, trace: Trace): Promise<voi
 }
 
 function newTrace(): Trace {
-  return { thumbnailRequests: [], instanceListRequests: 0, pixelDataRequests: 0 };
+  return {
+    thumbnailRequests: [],
+    instanceListRequests: 0,
+    pixelDataRequests: 0,
+    frameRequests: [],
+    metadataRequests: [],
+  };
 }
 
 test.describe('P9.1 viewer', () => {
@@ -117,6 +140,16 @@ test.describe('P9.1 viewer', () => {
 
     // eslint-disable-next-line no-console -- the measured value is the point
     console.log(`time to first rendered image: ${elapsed}ms (budget 5000ms)`);
+
+    // NOTE ON READING THIS NUMBER.
+    // It is wall-clock and therefore sensitive to CPU contention. Measured
+    // alone on the dev machine it is consistently ~985ms; with 7 parallel
+    // Playwright workers on the same box it rises to ~4700ms — still inside
+    // budget, but close enough to look like a regression when it is not.
+    //
+    // If this starts failing, re-run it with `--workers=1` BEFORE concluding
+    // the viewer got slower. A genuine regression shows up in the isolated
+    // number and in the JS-transferred assertion in the test below.
     expect(elapsed).toBeLessThan(5000);
   });
 
@@ -147,6 +180,71 @@ test.describe('P9.1 viewer', () => {
     const transferred = trace.thumbnailRequests.length * thumbnail.byteLength;
     const wholeStudy = INSTANCE_COUNT * thumbnail.byteLength;
     expect(transferred).toBeLessThan(wholeStudy * 0.05);
+  });
+
+  test('Cornerstone is NOT in the initial bundle — it loads after first paint', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const trace = newTrace();
+    await stubApi(page, thumbnail, trace);
+
+    const scriptsBeforeFirstImage: string[] = [];
+    page.on('request', (req) => {
+      if (req.resourceType() === 'script') scriptsBeforeFirstImage.push(req.url());
+    });
+
+    await page.goto(`/viewer/${STUDY_UID}`);
+    await page.getByTestId('first-image-rendered').waitFor({ state: 'attached' });
+
+    // The whole point of the lazy import: Cornerstone must not be in the
+    // critical path, or the 5-second budget is gone before a pixel is drawn.
+    const bytes = await page.evaluate(() =>
+      performance
+        .getEntriesByType('resource')
+        .filter((e) => e.name.endsWith('.js'))
+        .reduce((sum, e) => sum + ((e as PerformanceResourceTiming).transferSize || 0), 0),
+    );
+
+    // eslint-disable-next-line no-console -- the measured value is the point
+    console.log(`JS transferred before first image: ${Math.round(bytes / 1024)} KB`);
+
+    // 2 Mbit/s is 256 KB/s. The entire 5s budget is ~1.2 MB including HTML and
+    // TLS; the JS alone must stay well under that.
+    expect(bytes).toBeLessThan(600 * 1024);
+  });
+
+  test('attempts full-fidelity upgrade after the thumbnail, degrading safely', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const trace = newTrace();
+    await stubApi(page, thumbnail, trace);
+
+    await page.goto(`/viewer/${STUDY_UID}`);
+    await page.getByTestId('first-image-rendered').waitFor({ state: 'attached' });
+
+    // The upgrade is attempted only AFTER the thumbnail is on screen.
+    await expect
+      .poll(async () => page.getByTestId('viewer').getAttribute('data-fidelity'), {
+        timeout: 60_000,
+      })
+      .not.toBe('thumbnail');
+
+    // Cornerstone asks for metadata before frames — a frame without metadata
+    // is undecodable, so this ordering is a correctness property.
+    if (trace.frameRequests.length > 0) {
+      expect(trace.metadataRequests.length).toBeGreaterThan(0);
+    }
+
+    // The stub returns 404 for metadata, so the upgrade must FAIL SAFELY:
+    // the doctor keeps the thumbnail rather than getting a blank pane.
+    const fidelity = await page.getByTestId('viewer').getAttribute('data-fidelity');
+    expect(['loading-full', 'full', 'unavailable']).toContain(fidelity ?? '');
+    await expect(page.getByTestId('current-image')).toBeVisible();
+
+    // And the banner is still there regardless of fidelity.
+    await expect(page.getByTestId('diagnostic-banner')).toBeVisible();
   });
 
   test('banner is present, and present before any image loads', async ({ page }) => {

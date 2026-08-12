@@ -77,6 +77,42 @@ class StubServer {
 }
 
 async function routeApi(context: BrowserContext, server: StubServer): Promise<void> {
+  // The upload screen is behind RoleGate, so the session lookup has to answer
+  // before anything else renders. Stubbing it here rather than bypassing the
+  // gate keeps these tests on the same code path a real doctor takes.
+  await context.route('**/api/auth/me', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        userId: 'u-libya-doctor',
+        role: 'libya_doctor',
+        displayName: 'Dr Test',
+        mfaEnrolled: true,
+      }),
+    });
+  });
+
+  // The patient selector: a study must be attached to a record before the
+  // folder input is enabled.
+  await context.route('**/api/patients', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        patients: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            fullName: 'Test Patient',
+            phoneE164: '+218910000000',
+            dateOfBirth: '1990-01-01',
+            sex: 'M',
+          },
+        ],
+      }),
+    });
+  });
+
   await context.route('**/api/uploads', async (route: Route) => {
     await route.fulfill({
       status: 200,
@@ -207,6 +243,11 @@ test.describe('P7.3 persistent upload queue', () => {
       const page = await first.newPage();
       await page.goto('/upload');
 
+      // A study is attached to a patient record when the session is created,
+      // so the record is chosen before the folder.
+      await page
+        .getByTestId('patient-select')
+        .selectOption('11111111-1111-4111-8111-111111111111');
       await page.getByTestId('folder-input').setInputFiles(studyDir);
 
       // Wait until the transfer is genuinely under way but nowhere near done.
@@ -285,6 +326,9 @@ test.describe('P7.3 persistent upload queue', () => {
       await routeApi(context, server);
       const page = await context.newPage();
       await page.goto('/upload');
+      await page
+        .getByTestId('patient-select')
+        .selectOption('11111111-1111-4111-8111-111111111111');
       await page.getByTestId('folder-input').setInputFiles(studyDir);
 
       await expect

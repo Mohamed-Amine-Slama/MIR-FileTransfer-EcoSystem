@@ -17,6 +17,31 @@ const nextConfig = {
   // Transpile workspace packages rather than requiring them to be prebuilt.
   transpilePackages: ['@mir/contracts'],
 
+  /**
+   * Cornerstone's DICOM image loader reaches for Node built-ins.
+   *
+   * `@cornerstonejs/dicom-image-loader` ships an HTJ2K decoder whose module
+   * graph imports `fs`, which cannot resolve in a browser bundle. The import
+   * is not reachable at runtime in the browser — it belongs to a code path
+   * that only executes under Node — but webpack resolves the whole graph
+   * statically and fails the build.
+   *
+   * Stubbing these to `false` for the CLIENT bundle only is the documented
+   * fix. The server bundle keeps the real modules, so nothing server-side
+   * loses filesystem access.
+   */
+  webpack(config, { isServer }) {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+        crypto: false,
+      };
+    }
+    return config;
+  },
+
   async headers() {
     // Baseline security headers. The authoritative set is enforced at the edge
     // by Cloudflare (P14.3); these exist so a local or misconfigured-edge

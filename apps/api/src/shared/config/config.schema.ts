@@ -118,6 +118,18 @@ export const configSchema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().startsWith('whsec_').optional(),
   PAYMENT_CURRENCY: z.string().regex(/^[A-Z]{3}$/, 'PAYMENT_CURRENCY must be ISO-4217').default('TND'),
 
+  // The consultation fee, in MINOR units of PAYMENT_CURRENCY (so 15000 = 150.00
+  // TND). Minor units throughout, never a decimal: floating-point money is how
+  // a rounding difference ends up between what the patient was shown and what
+  // the card was charged.
+  //
+  // Config rather than a per-doctor column because v1 charges one price. When
+  // doctors set their own fees this moves to the doctor profile, and the API
+  // shape here does not have to change — the amount is already resolved
+  // server-side, never sent by the client. A client-supplied amount would let
+  // a patient authorise one dinar for a consultation.
+  CONSULTATION_FEE_MINOR: intFromEnv('CONSULTATION_FEE_MINOR', 1, 100_000_000).default('15000'),
+
   // --- retention (BLOCKING L5) --------------------------------------------
   // These values are placeholders until counsel answers L5. They are config
   // precisely so the legal answer is a deployment change, not a rewrite.

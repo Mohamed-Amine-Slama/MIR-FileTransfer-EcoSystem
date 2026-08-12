@@ -50,7 +50,17 @@ describe('P6.1 fixture contract', () => {
     expect(header.isLossy).toBe(false);
   });
 
-  it('fixture 02 — 120-file CT series: all accepted, ONE StudyInstanceUID', () => {
+  // 30s, not the 5s default, because this test is I/O-bound rather than
+  // compute-bound: it reads 120 fixture files, and on a repo checked out on a
+  // Windows-mounted path under WSL2 every one of those reads crosses the 9p
+  // filesystem boundary. Alone it takes under a second; under `pnpm -r test`,
+  // with four packages reading that mount at once, it has been measured at
+  // over three — and it does not degrade gracefully, it simply exceeds the
+  // deadline and reports as a failure that looks like a parser bug.
+  //
+  // The assertions are unchanged. This buys headroom for a slow disk, not
+  // tolerance for slow code.
+  it('fixture 02 — 120-file CT series: all accepted, ONE StudyInstanceUID', { timeout: 30_000 }, () => {
     const files = load('02-ct-series-120');
     expect(files.length).toBe(120);
 

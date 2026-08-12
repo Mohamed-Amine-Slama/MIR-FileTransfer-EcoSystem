@@ -11,6 +11,7 @@ import { EventsModule } from './shared/events/events.module';
 import { AuditModule } from './modules/audit';
 import { BillingModule } from './modules/billing';
 import { ConsentModule } from './modules/consent';
+import { IdentityModule } from './modules/identity';
 import { ImagingModule } from './modules/imaging';
 import { NotificationsModule } from './modules/notifications';
 import { PatientsModule } from './modules/patients';
@@ -33,6 +34,7 @@ import { SchedulingModule } from './modules/scheduling';
     DiscoveryModule,
     HealthModule,
     AuditModule,
+    IdentityModule,
     PatientsModule,
     ConsentModule,
     ImagingModule,

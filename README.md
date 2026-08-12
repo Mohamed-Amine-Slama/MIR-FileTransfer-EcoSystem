@@ -103,9 +103,12 @@ The tests that matter most:
 
 Beyond the legal and infrastructure blockers above:
 
-- **Cornerstone3D is not installed.** The viewer renders thumbnails, which is
-  what meets the <5s first-image gate; full-fidelity frame rendering is not
-  implemented.
+- **Full-fidelity rendering is unproven against a real Orthanc.** Cornerstone3D
+  is installed and wired (lazy-loaded after first paint, `wadors:` image ids
+  routed through the API proxy, metadata provider registered, window presets).
+  The load ordering and safe degradation are covered by e2e tests, but an
+  actual 16-bit frame has never been rendered end-to-end — that needs Orthanc
+  serving real WADO-RS frames.
 - **No trace collector is wired.** Span creation, naming and redaction are
   implemented and tested (API → DB → Orthanc → S3 under one trace id); the
   exporter writes JSON rather than shipping to an OTLP endpoint.

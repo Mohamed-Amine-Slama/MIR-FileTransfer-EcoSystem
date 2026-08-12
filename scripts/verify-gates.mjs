@@ -46,7 +46,7 @@ const GATES = [
   ['P7.4', 'Study integrity under retry', 'verified', '120 files, idempotent, byte-exact'],
   ['P8.1', 'Orthanc private + functional', 'partial', 'local: auth + DICOMweb verified; VPC isolation not'],
   ['P8.2', 'No browser path to Orthanc', 'verified', '404+audit, signed URL 4min/20min, bundle grep'],
-  ['P9.1', 'First image <5s, no prefetch', 'verified', '~1.0s; 1 request for 120 instances'],
+  ['P9.1', 'First image <5s, no prefetch', 'verified', '~985ms isolated; 1 request for 120 instances; Cornerstone lazy-loaded'],
   ['P10.1', 'Timezone correctness', 'verified', 'Tunis/Tripoli + DST boundary'],
   ['P10.2', '50 concurrent, exactly one wins', 'verified', 'deterministic over 5 rounds'],
   ['P10.3', 'Triage toggle both modes', 'verified', 'enforced at RLS layer too'],

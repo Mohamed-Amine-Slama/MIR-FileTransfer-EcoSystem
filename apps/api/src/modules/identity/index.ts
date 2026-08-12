@@ -9,4 +9,6 @@
  * There is no third option — in particular, no module may query another
  * module's tables directly.
  */
-export {};
+export { IdentityService } from './internal/identity.service';
+export type { CurrentUser } from './internal/identity.service';
+export { IdentityModule } from './identity.module';

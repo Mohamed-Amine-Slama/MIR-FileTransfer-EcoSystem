@@ -3,6 +3,7 @@ import { APP_CONFIG } from '../../shared/config/config.module';
 import type { AppConfig } from '../../shared/config/config.schema';
 import { DatabaseModule } from '../../shared/db/database.module';
 import { EventsModule } from '../../shared/events/events.module';
+import { BillingController } from './internal/billing.controller';
 import { BillingService } from './internal/billing.service';
 import { PAYMENT_RAIL } from './internal/payment-rail.tokens';
 import { StripePaymentRail, type PaymentRail } from './internal/payment-rail';
@@ -31,6 +32,7 @@ class UnconfiguredRail implements PaymentRail {
 
 @Module({
   imports: [DatabaseModule, EventsModule],
+  controllers: [BillingController],
   providers: [
     BillingService,
     {
