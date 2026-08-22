@@ -12,8 +12,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@cornerstonejs/core": "^3.0.0",
-    "@cornerstonejs/dicom-image-loader": "^3.0.0",
+    "@cornerstonejs/core": "^5.8.2",
+    "@cornerstonejs/dicom-image-loader": "^5.8.2",
     "@mir/contracts": "workspace:*",
     "next": "^15.1.4",
     "react": "^19.0.0",
