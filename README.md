@@ -50,6 +50,36 @@ pnpm verify:gates                        # what is actually verified vs open
 Requires Node 20+ and Docker. PostgreSQL listens on **5433** to avoid
 colliding with a local install.
 
+### Running the apps in containers instead
+
+The quick start above runs the two apps on the host and only the dependencies
+in Docker. To run everything in containers:
+
+```bash
+docker compose --profile apps up -d --build
+```
+
+Web on <http://localhost:3001>, API on <http://localhost:3000>. Migrations run
+automatically as a one-shot `migrate` service before the API starts.
+
+Two things about this stack are worth knowing:
+
+- **It is single-origin.** The frontend calls the API at `/api` on its own
+  origin, and the `web` image is built with `API_ORIGIN` set so Next rewrites
+  that prefix to the API service — the job Cloudflare does at the edge in
+  deployed environments (P8.2). Because `next build` bakes the rewrite into its
+  standalone output, changing where `/api` points needs a rebuild, not a
+  restart.
+- **The API connects as `mir_app`, not as a superuser**, so row-level security
+  is actually in force (ADR-6). Migration 0002 creates that role `NOLOGIN` with
+  no password on purpose, so a `db-grant` service attaches a local development
+  password after migrating. Nothing outside this compose file does that, and
+  nothing should.
+
+The app services sit behind the `apps` profile, so plain
+`docker compose up -d postgres redis` still starts dependencies only and does
+not contend for ports 3000 and 3001 with a host `pnpm dev`.
+
 ## Layout
 
 ```

@@ -1,0 +1,55 @@
+# Build context exclusions for the API and web images.
+#
+# Both Dockerfiles build from the REPOSITORY ROOT (the pnpm workspace lockfile
+# and packages/* live above apps/*), so this file governs every image build.
+
+# --- never ship credentials ------------------------------------------------
+# .env is gitignored and holds real local credentials. It must not enter a
+# build context: anything copied into a layer is readable in the final image
+# even if a later stage deletes it. Configuration arrives as runtime env vars.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+.aws/
+credentials
+
+# --- host build output -----------------------------------------------------
+# Excluded so the image always compiles from source. Host node_modules are
+# especially wrong to copy: sharp and dicom-parser resolve platform-specific
+# binaries, and a glibc/WSL2 tree does not run on Alpine's musl.
+**/node_modules
+**/dist
+**/.next
+**/out
+**/build
+**/*.tsbuildinfo
+.pnpm-store
+
+# --- test and tooling output ----------------------------------------------
+**/coverage
+**/test-results
+**/playwright-report
+**/.vitest
+
+# --- not needed to build or run -------------------------------------------
+.git
+.github
+.gitleaks.toml
+.dependency-cruiser.cjs
+docs
+infra
+scripts
+test-data
+BUILD_SPEC.md
+README.md
+SECURITY.md
+eslint.config.mjs
+**/*.log
+**/.DS_Store
+**/Thumbs.db
+.idea
+.vscode

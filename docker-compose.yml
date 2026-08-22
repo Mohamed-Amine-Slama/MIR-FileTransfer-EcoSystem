@@ -1,8 +1,19 @@
-# Local development dependencies only.
+# Local development stack.
 #
 # ADR-7: this stack never contains real patient data. It is seeded from
 # test-data/ (synthetic DICOM) and nothing else. Do not point it at a
 # production snapshot, not even briefly.
+#
+# Two ways to run it:
+#
+#   docker compose up -d postgres redis        dependencies only; apps run on
+#                                              the host (pnpm dev). The default.
+#   docker compose --profile apps up -d        dependencies AND the API and web
+#                                              in containers.
+#
+# The app services sit behind the `apps` profile so the first form keeps
+# behaving exactly as it always has, and so containers do not fight the host's
+# `next dev` for ports 3000 and 3001.
 
 services:
   postgres:
@@ -108,6 +119,148 @@ services:
       postgres:
         condition: service_healthy
 
+  # --- application containers (profile: apps) -------------------------------
+
+  migrate:
+    profiles: ['apps']
+    image: mir-api:local
+    build:
+      # Root context, not apps/api: the pnpm lockfile and packages/* live here.
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: mir-migrate
+    restart: 'no'
+    # DATABASE_MIGRATOR_URL, not DATABASE_URL. The migrator must connect as a
+    # role that OWNS the tables; mir_app deliberately cannot run DDL, so that an
+    # injection bug cannot drop an RLS policy (ADR-6, migrate-cli.ts).
+    environment:
+      DATABASE_MIGRATOR_URL: postgresql://postgres:postgres@postgres:5432/mir
+    command: ['node', 'dist/shared/db/migrate-cli.js', 'up']
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  db-grant:
+    profiles: ['apps']
+    # postgres image for psql; the API image ships no database client.
+    image: postgres:16-alpine
+    container_name: mir-db-grant
+    restart: 'no'
+    # Migration 0002 creates mir_app as NOLOGIN with no password on purpose — a
+    # password in a migration is a password in git. So the role cannot connect
+    # until something attaches a local one, which is what this does.
+    #
+    # The alternative is pointing the API at the postgres superuser, and that
+    # would quietly disable the second layer of access control: superusers
+    # bypass RLS, so every ADR-6 policy would stop applying locally while the
+    # app appeared to work. This mirrors what the RLS test harness already does
+    # (apps/api/src/shared/db/testing/rls-harness.ts).
+    environment:
+      PGPASSWORD: postgres
+    entrypoint:
+      - sh
+      - -c
+      - |
+        psql -v ON_ERROR_STOP=1 -h postgres -U postgres -d mir \
+          -c "ALTER ROLE mir_app LOGIN PASSWORD '${MIR_APP_DEV_PASSWORD:-mir_app_dev_pw}'"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    profiles: ['apps']
+    image: mir-api:local
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: mir-api
+    environment:
+      # development, NOT production. StorageModule refuses to boot in staging or
+      # production without a real S3-backed store (config.schema.ts), and it is
+      # right to: originals on a container filesystem are one restart from being
+      # lost. This stack holds synthetic data only (ADR-7).
+      NODE_ENV: development
+      PORT: '3000'
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+
+      # The non-superuser application role, so RLS is genuinely enforced here
+      # rather than silently bypassed (ADR-6, P3.2). Password attached by
+      # db-grant above.
+      DATABASE_URL: postgresql://mir_app:${MIR_APP_DEV_PASSWORD:-mir_app_dev_pw}@postgres:5432/mir
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+
+      REDIS_URL: redis://redis:6379
+
+      # These two URLs differ ON PURPOSE, and the config schema keeps them
+      # separate precisely so they can.
+      #
+      # ISSUER is the `iss` claim the browser's token will carry, so it must be
+      # the address the BROWSER used — a published host port. JWKS is fetched by
+      # the API over the compose network, where `localhost` is the API container
+      # itself. Setting both to one value breaks either signature verification
+      # or issuer validation, depending on which one you pick.
+      KEYCLOAK_ISSUER_URL: http://localhost:${KEYCLOAK_HOST_PORT:-8080}/realms/mir
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/mir/protocol/openid-connect/certs
+      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-mir-api}
+
+      # Matches ORTHANC__REGISTERED_USERS on the orthanc service above. The
+      # browser never talks to Orthanc directly (P8.2) — only the API does.
+      ORTHANC_URL: http://orthanc:8042
+      ORTHANC_USERNAME: ${ORTHANC_USERNAME:-mir-api}
+      ORTHANC_PASSWORD: ${ORTHANC_PASSWORD:-change-me}
+
+      AWS_REGION: ${AWS_REGION:-eu-south-1}
+      S3_BUCKET_ORIGINALS: ${S3_BUCKET_ORIGINALS:-mir-dev-dicom-originals}
+      S3_BUCKET_DERIVED: ${S3_BUCKET_DERIVED:-mir-dev-derived}
+      S3_BUCKET_AUDIT_LOGS: ${S3_BUCKET_AUDIT_LOGS:-mir-dev-audit-logs}
+
+      # Development BlobStore root. Owned by the `node` user in the image so the
+      # named volume below inherits writable ownership.
+      LOCAL_STORAGE_ROOT: /var/lib/mir/storage
+
+      # Local-only value. Deployed environments take this from Secrets Manager
+      # (§6); rotating it invalidates in-flight image URLs only.
+      SIGNED_URL_SECRET: ${SIGNED_URL_SECRET:-change-me-local-dev-only-at-least-32-chars}
+    volumes:
+      - mir-api-storage:/var/lib/mir/storage
+    ports:
+      - '${API_HOST_PORT:-3000}:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      orthanc:
+        condition: service_healthy
+      # Not service_healthy: the keycloak service declares no healthcheck. The
+      # API resolves JWKS lazily on first token verification, not at boot, so it
+      # tolerates Keycloak still starting.
+      keycloak:
+        condition: service_started
+      db-grant:
+        condition: service_completed_successfully
+
+  web:
+    profiles: ['apps']
+    image: mir-web:local
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Makes the container stack single-origin: Next rewrites /api/* to the
+        # API service, the way Cloudflare does at the edge in deployed
+        # environments (P8.2/P14.3). A build argument rather than an environment
+        # variable because `next build` bakes the resolved rewrite into the
+        # standalone output — see the rewrites() block in next.config.mjs.
+        API_ORIGIN: http://api:3000
+    container_name: mir-web
+    ports:
+      - '${WEB_HOST_PORT:-3001}:3001'
+    depends_on:
+      api:
+        condition: service_healthy
+
 volumes:
   mir-pgdata:
   mir-orthanc-db:
+  mir-api-storage:
