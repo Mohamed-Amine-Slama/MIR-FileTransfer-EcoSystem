@@ -15,7 +15,7 @@
     "@cornerstonejs/core": "^3.0.0",
     "@cornerstonejs/dicom-image-loader": "^3.0.0",
     "@mir/contracts": "workspace:*",
-    "next": "^15.1.4",
+    "next": "^16.3.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
