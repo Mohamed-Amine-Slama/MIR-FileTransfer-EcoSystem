@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@nestjs/testing": "^10.4.15",
-    "@swc/core": "^1.10.7",
+    "@swc/core": "^1.16.1",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.5",
     "@types/supertest": "^6.0.2",
@@ -42,7 +42,7 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0",
-    "unplugin-swc": "^1.5.1",
+    "unplugin-swc": "^1.5.11",
     "vitest": "^3.2.6"
   }
 }
