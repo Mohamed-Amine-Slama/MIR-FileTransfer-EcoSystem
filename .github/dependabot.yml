@@ -1,11 +1,88 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
+# Mises à jour de version Dependabot.
+#
+# L'ancien contenu était le squelette généré par GitHub, avec
+# `package-ecosystem: ""` — une valeur invalide, donc AUCUNE mise à jour de
+# version n'a jamais tourné. Les alertes visibles dans l'onglet Security sont
+# des *security updates*, que Dependabot produit sans configuration ; c'est
+# pour cela que le dépôt recevait des alertes mais jamais de PR de montée de
+# version préventive.
 version: 2
 updates:
-  - package-ecosystem: "" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  # --- npm / pnpm workspace ---------------------------------------------------
+  # Un seul bloc à la racine : le lockfile pnpm couvre apps/* et packages/*.
+  - package-ecosystem: "npm"
+    directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    # Groupé, sinon 25 alertes ouvertes deviennent 25 PR à relire une par une.
+    groups:
+      nestjs:
+        patterns:
+          - "@nestjs/*"
+      next-web:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "@types/react*"
+      cornerstone:
+        patterns:
+          - "@cornerstonejs/*"
+      typescript-toolchain:
+        patterns:
+          - "typescript"
+          - "typescript-eslint"
+          - "eslint*"
+          - "@typescript-eslint/*"
+          - "vitest"
+          - "@vitest/*"
+          - "tsx"
+          - "@swc/*"
+        update-types:
+          - "minor"
+          - "patch"
+      dev-minor-patch:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # sharp est lié à libvips natif : la montée se fait volontairement à la
+      # main, une régression de décodage d'image casse la génération de
+      # vignettes DICOM sans que rien d'autre n'échoue.
+      - dependency-name: "sharp"
+        update-types: ["version-update:semver-major"]
+
+  # --- GitHub Actions ---------------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  # --- images de base des conteneurs applicatifs ------------------------------
+  - package-ecosystem: "docker"
+    directories:
+      - "/apps/api"
+      - "/apps/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+
+  # --- Terraform --------------------------------------------------------------
+  - package-ecosystem: "terraform"
+    directories:
+      - "/infra/terraform/environments/dev"
+      - "/infra/terraform/environments/staging"
+      - "/infra/terraform/environments/prod"
+      - "/infra/terraform/modules/database"
+      - "/infra/terraform/modules/network"
+    schedule:
+      interval: "weekly"
+      day: "monday"

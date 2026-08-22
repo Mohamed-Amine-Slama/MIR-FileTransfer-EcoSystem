@@ -7,13 +7,14 @@ import { DicomWebController } from './internal/dicomweb.controller';
 import { IngestionService } from './internal/ingestion.service';
 import { OrthancHttpClient } from './internal/orthanc.http-client';
 import { ORTHANC_CLIENT } from './internal/orthanc.client';
+import { StudiesController } from './internal/studies.controller';
 import { StudyAccessService } from './internal/study-access.service';
 import { ThumbnailService } from './internal/thumbnail.service';
 import { UploadService } from './internal/upload.service';
 
 @Module({
   imports: [DatabaseModule, EventsModule, StorageModule],
-  controllers: [DicomWebController],
+  controllers: [DicomWebController, StudiesController],
   providers: [
     UploadService,
     IngestionService,

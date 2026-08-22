@@ -163,6 +163,36 @@ export class DicomWebController {
   }
 
   /**
+   * Per-instance metadata in DICOM JSON — required by Cornerstone3D (P9.1).
+   *
+   * A `wadors:` image id cannot be rendered from pixels alone: the loader
+   * needs Rows, Columns, BitsAllocated, PixelRepresentation, RescaleSlope and
+   * the VOI LUT before it can turn bytes into an image. Without this endpoint
+   * the viewer has no way to display full-fidelity data at all.
+   *
+   * Authorised and audited like every other route. Metadata is patient data:
+   * study date, modality and body part are all in here.
+   */
+  @RequiresRole('tunisia_doctor', 'libya_doctor', 'patient')
+  @Get('studies/:studyUid/instances/:sopUid/metadata')
+  @Header('cache-control', 'no-store')
+  async instanceMetadata(
+    @Param('studyUid') studyUid: string,
+    @Param('sopUid') sopUid: string,
+  ): Promise<unknown> {
+    await this.access.authoriseStudyAccess(studyUid, 'metadata');
+
+    const upstream = await this.orthanc.retrieve(
+      `/dicom-web/studies/${encodeURIComponent(studyUid)}` +
+        `/instances/${encodeURIComponent(sopUid)}/metadata`,
+      'application/dicom+json',
+    );
+
+    if (!upstream.ok) throw new NotFoundException('Instance metadata not found');
+    return upstream.json();
+  }
+
+  /**
    * WADO-RS frame retrieval — what Cornerstone3D's `wadors:` loader fetches
    * (P9.1).
    *

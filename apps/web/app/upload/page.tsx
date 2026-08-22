@@ -1,9 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { api, type Patient } from '../../lib/api/endpoints';
 import { createUploadApi } from '../../lib/upload/api-client';
 import { queueDb, type QueuedFile } from '../../lib/upload/queue-db';
 import { Uploader } from '../../lib/upload/uploader';
+import { useT } from '../../lib/i18n/provider';
+import { RoleGate } from '../../components/RoleGate';
+import { Field, Select } from '../../components/ui';
 
 /**
  * Upload screen — BUILD_SPEC P7.3.
@@ -19,8 +23,19 @@ import { Uploader } from '../../lib/upload/uploader';
  *    needs to see which files are still owed before they leave the clinic.
  */
 export default function UploadPage() {
+  return (
+    <RoleGate allow={['libya_doctor']}>
+      <UploadScreen />
+    </RoleGate>
+  );
+}
+
+function UploadScreen() {
+  const t = useT();
   const [files, setFiles] = useState<QueuedFile[]>([]);
   const [resumeNotice, setResumeNotice] = useState<string | null>(null);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [patientId, setPatientId] = useState('');
   const uploaderRef = useRef<Uploader | null>(null);
 
   const getUploader = useCallback((): Uploader => {
@@ -47,23 +62,34 @@ export default function UploadPage() {
     };
   }, [getUploader]);
 
+  // The doctor's own patients, for attaching the study to a record. RLS
+  // decides which rows come back; this list is never filtered client-side.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { patients: rows } = await api.patients.list();
+        setPatients(rows);
+      } catch {
+        // Upload is still usable if this fails — the selector simply stays
+        // empty and the doctor is blocked from starting, which is better than
+        // uploading a study against a guessed patient id.
+        setPatients([]);
+      }
+    })();
+  }, []);
+
   const onFolderSelected = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const selected = Array.from(event.target.files ?? []);
-      if (selected.length === 0) return;
+      if (selected.length === 0 || patientId === '') return;
 
-      const api = createUploadApi();
-      // In the real flow the patient is chosen on the previous screen; the
-      // element below carries it so this page stays independent of routing.
-      const patientId =
-        document.querySelector<HTMLInputElement>('#patient-id')?.value ?? 'unknown';
-
-      const { sessionId } = await api.createSession(patientId, selected.length);
+      const uploadApi = createUploadApi();
+      const { sessionId } = await uploadApi.createSession(patientId, selected.length);
       const uploader = getUploader();
       await uploader.enqueueFiles(sessionId, patientId, selected);
       void uploader.start();
     },
-    [getUploader],
+    [getUploader, patientId],
   );
 
   const totalBytes = files.reduce((sum, f) => sum + f.sizeBytes, 0);
@@ -83,7 +109,26 @@ export default function UploadPage() {
         </p>
       )}
 
-      <input type="hidden" id="patient-id" defaultValue="" />
+      {/* The study is attached to a patient record at the moment the session
+          is created, not afterwards. An upload with no owner would be imaging
+          that RLS cannot scope to anyone — unreachable, and undeletable by the
+          application role. */}
+      <div style={{ marginBlock: '1rem' }}>
+        <Field label={t.patientsTitle}>
+          <Select
+            data-testid="patient-select"
+            value={patientId}
+            onChange={(e) => setPatientId(e.target.value)}
+          >
+            <option value="">—</option>
+            {patients.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.fullName} · {p.phoneE164}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
 
       <label style={{ display: 'block', marginBlock: '1rem' }}>
         {/* webkitdirectory: a study is a FOLDER of many files, often

@@ -146,7 +146,7 @@ above supports.
 | P6 DICOM validation | ✅ |
 | P7 Resumable upload | ✅ except physically-severed-network test |
 | P8 Orthanc + DICOMweb | ✅ locally; VPC isolation unverified |
-| P9 Viewer | ✅ gates met; **Cornerstone3D not installed** — thumbnails only, no full-fidelity rendering |
+| P9 Viewer | ✅ gates met; Cornerstone3D installed and wired, **full-fidelity render unproven against a real Orthanc** |
 | P10 Scheduling | ✅ |
 | P11 Payments | ✅ code; **rail viability unresolved (L7/D2a)** |
 | P12 Notifications | ✅ templates + guard; no delivery provider wired |

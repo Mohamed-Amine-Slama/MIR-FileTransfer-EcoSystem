@@ -75,12 +75,61 @@ async function ensureInitialised(apiBase: string): Promise<{
       maxWebWorkers: Math.max(1, Math.min(4, navigator.hardwareConcurrency ?? 2)),
     });
 
+    // Register the WADO-RS metadata provider.
+    //
+    // A `wadors:` image id carries pixels only. Cornerstone needs Rows,
+    // Columns, BitsAllocated, PixelRepresentation, RescaleSlope/Intercept and
+    // the VOI LUT before those bytes mean anything — and it obtains them from
+    // this provider, not from the frame response. Skip this and setStack()
+    // fails with an opaque metadata error rather than an obvious one.
+    core.metaData.addProvider(
+      // NOTE: nested under `metaData`, not directly on `wadors` (v3 layout).
+      (type: string, imageId: string) => loader.wadors.metaData.metaDataProvider(type, imageId),
+      // Low priority: our provider is a fallback behind anything Cornerstone
+      // already knows.
+      10_000,
+    );
+
     initialised = true;
   }
 
   void apiBase;
   return { core, loader };
 }
+
+/**
+ * Fetch DICOM JSON metadata for one instance and register it.
+ *
+ * Must complete BEFORE the image id is displayed. Cached per image id: a
+ * doctor scrolling back and forth through a series should not re-fetch
+ * metadata that cannot have changed — the study is immutable (ADR-4).
+ */
+async function registerInstanceMetadata(
+  loader: typeof import('@cornerstonejs/dicom-image-loader'),
+  apiBase: string,
+  studyUid: string,
+  sopInstanceUid: string,
+  imageId: string,
+): Promise<void> {
+  if (metadataRegistered.has(imageId)) return;
+
+  const res = await fetch(
+    `${apiBase}/dicom-web/studies/${encodeURIComponent(studyUid)}` +
+      `/instances/${encodeURIComponent(sopInstanceUid)}/metadata`,
+    { credentials: 'include', headers: { accept: 'application/dicom+json' } },
+  );
+  if (!res.ok) throw new Error(`metadata unavailable (${res.status})`);
+
+  const json = (await res.json()) as unknown;
+  // DICOMweb returns an array of instances; a per-instance request returns one.
+  const instance = Array.isArray(json) ? json[0] : json;
+  if (instance === undefined) throw new Error('empty metadata');
+
+  loader.wadors.metaDataManager.add(imageId, instance as never);
+  metadataRegistered.add(imageId);
+}
+
+const metadataRegistered = new Set<string>();
 
 /**
  * Create a viewer bound to a DOM element.
@@ -90,7 +139,7 @@ async function ensureInitialised(apiBase: string): Promise<{
  */
 export async function createViewer(init: ViewerInit): Promise<CornerstoneViewer> {
   const apiBase = init.apiBase ?? '/api';
-  const { core } = await ensureInitialised(apiBase);
+  const { core, loader: loaderRef } = await ensureInitialised(apiBase);
 
   const renderingEngineId = `mir-engine-${init.studyUid}`;
   const viewportId = 'mir-viewport';
@@ -120,7 +169,10 @@ export async function createViewer(init: ViewerInit): Promise<CornerstoneViewer>
 
   return {
     async showInstance(sopInstanceUid: string): Promise<void> {
-      await viewport.setStack([imageIdFor(sopInstanceUid)], 0);
+      const imageId = imageIdFor(sopInstanceUid);
+      // Metadata first — the frame bytes are meaningless without it.
+      await registerInstanceMetadata(loaderRef, apiBase, init.studyUid, sopInstanceUid, imageId);
+      await viewport.setStack([imageId], 0);
       viewport.render();
     },
 

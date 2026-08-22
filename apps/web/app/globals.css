@@ -20,8 +20,29 @@
   --color-border: #dfe4ea;
   --color-warning-bg: #fff4e5;
   --color-warning-fg: #7a4b00;
+
+  --color-surface: #f7f9fb;
+  --color-accent: #0b6bcb;
+  --color-accent-fg: #ffffff;
+  --color-danger-bg: #fdecea;
+  --color-danger-fg: #8c1d18;
+  --color-success-bg: #e6f4ea;
+  --color-success-fg: #1b5e20;
+  --color-info-bg: #e8f1fb;
+  --color-info-fg: #0b4a8f;
+
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
   --space-md: 1rem;
   --space-lg: 1.5rem;
+  --space-xl: 2.5rem;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  --font-sm: 0.85rem;
+  --font-lg: 1.15rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -32,6 +53,16 @@
     --color-border: #262d35;
     --color-warning-bg: #3a2a0d;
     --color-warning-fg: #ffd79a;
+
+    --color-surface: #161b21;
+    --color-accent: #4a9eea;
+    --color-accent-fg: #08131f;
+    --color-danger-bg: #3d1714;
+    --color-danger-fg: #ffb4ab;
+    --color-success-bg: #12301a;
+    --color-success-fg: #9fd8ab;
+    --color-info-bg: #10263d;
+    --color-info-fg: #a8cdf5;
   }
 }
 
@@ -54,4 +85,353 @@ main {
   margin-inline: auto;
   padding-inline: var(--space-lg);
   padding-block: var(--space-lg);
+}
+
+/* ---------------------------------------------------------------------------
+ * Layout
+ *
+ * `main` keeps its reading-width cap for prose-shaped pages. Screens that need
+ * the full width (worklists, the viewer) opt out with .page--wide rather than
+ * overriding the cap ad hoc, so there is one place that knows the measure.
+ * ------------------------------------------------------------------------ */
+
+.page--wide {
+  max-width: 72rem;
+}
+
+.stack > * + * {
+  margin-block-start: var(--space-md);
+}
+
+.stack-sm > * + * {
+  margin-block-start: var(--space-sm);
+}
+
+.row {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.row--between {
+  justify-content: space-between;
+}
+
+.grid {
+  display: grid;
+  gap: var(--space-md);
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+}
+
+.muted {
+  color: var(--color-muted);
+}
+
+.small {
+  font-size: var(--font-sm);
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+ * App shell
+ * ------------------------------------------------------------------------ */
+
+.shell-header {
+  border-block-end: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.shell-header__inner {
+  max-width: 72rem;
+  margin-inline: auto;
+  padding-inline: var(--space-lg);
+  padding-block: var(--space-sm);
+  display: flex;
+  gap: var(--space-md);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.shell-brand {
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--color-fg);
+  font-size: var(--font-lg);
+}
+
+.shell-nav {
+  display: flex;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.shell-nav__link {
+  color: var(--color-fg);
+  text-decoration: none;
+  padding-inline: var(--space-sm);
+  padding-block: var(--space-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-sm);
+}
+
+.shell-nav__link:hover,
+.shell-nav__link:focus-visible {
+  background: var(--color-bg);
+}
+
+.shell-nav__link[aria-current='page'] {
+  background: var(--color-bg);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 0 var(--color-accent);
+}
+
+/* ---------------------------------------------------------------------------
+ * Controls
+ * ------------------------------------------------------------------------ */
+
+.btn {
+  font: inherit;
+  padding-inline: var(--space-md);
+  padding-block: 0.45rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-fg);
+  font-weight: 600;
+}
+
+.btn--danger {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-fg);
+  color: var(--color-danger-fg);
+}
+
+.btn--ghost {
+  border-color: transparent;
+  background: transparent;
+}
+
+.btn--sm {
+  padding-inline: var(--space-sm);
+  padding-block: 0.2rem;
+  font-size: var(--font-sm);
+}
+
+.field {
+  display: block;
+}
+
+.field__label {
+  display: block;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  margin-block-end: var(--space-xs);
+}
+
+.field__hint {
+  display: block;
+  font-size: var(--font-sm);
+  color: var(--color-muted);
+  margin-block-start: var(--space-xs);
+}
+
+.field__error {
+  display: block;
+  font-size: var(--font-sm);
+  color: var(--color-danger-fg);
+  margin-block-start: var(--space-xs);
+}
+
+.input,
+.select,
+.textarea {
+  font: inherit;
+  width: 100%;
+  padding-inline: var(--space-sm);
+  padding-block: 0.45rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+
+.input:focus-visible,
+.select:focus-visible,
+.textarea:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.input[aria-invalid='true'] {
+  border-color: var(--color-danger-fg);
+}
+
+/* ---------------------------------------------------------------------------
+ * Surfaces
+ * ------------------------------------------------------------------------ */
+
+.card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  background: var(--color-surface);
+}
+
+.card__title {
+  margin: 0 0 var(--space-xs);
+  font-size: var(--font-lg);
+}
+
+.alert {
+  padding-inline: var(--space-md);
+  padding-block: var(--space-sm);
+  border-radius: var(--radius-md);
+  /* Logical, so the accent bar sits on the correct side under RTL. */
+  border-inline-start: 4px solid currentColor;
+}
+
+.alert--info {
+  background: var(--color-info-bg);
+  color: var(--color-info-fg);
+}
+
+.alert--warning {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-fg);
+}
+
+.alert--danger {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-fg);
+}
+
+.alert--success {
+  background: var(--color-success-bg);
+  color: var(--color-success-fg);
+}
+
+.badge {
+  display: inline-block;
+  padding-inline: var(--space-sm);
+  padding-block: 0.1rem;
+  border-radius: 999px;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.badge--info { background: var(--color-info-bg); color: var(--color-info-fg); border-color: transparent; }
+.badge--warning { background: var(--color-warning-bg); color: var(--color-warning-fg); border-color: transparent; }
+.badge--danger { background: var(--color-danger-bg); color: var(--color-danger-fg); border-color: transparent; }
+.badge--success { background: var(--color-success-bg); color: var(--color-success-fg); border-color: transparent; }
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.list__item {
+  display: flex;
+  gap: var(--space-md);
+  align-items: center;
+  padding-inline: var(--space-md);
+  padding-block: var(--space-sm);
+  background: var(--color-bg);
+}
+
+.list__item + .list__item {
+  border-block-start: 1px solid var(--color-border);
+}
+
+.empty {
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-xl) var(--space-md);
+  text-align: center;
+  color: var(--color-muted);
+}
+
+/* Spinner: honours reduced-motion, because a clinic screen that spins forever
+   on a slow link should not also be a vestibular problem. */
+.spinner {
+  display: inline-block;
+  inline-size: 1rem;
+  block-size: 1rem;
+  border: 2px solid var(--color-border);
+  border-block-start-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 3s; }
+}
+
+/* Steps indicator for the booking flow. */
+.steps {
+  display: flex;
+  gap: var(--space-sm);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex-wrap: wrap;
+  font-size: var(--font-sm);
+}
+
+.steps__item {
+  color: var(--color-muted);
+}
+
+.steps__item[aria-current='step'] {
+  color: var(--color-fg);
+  font-weight: 700;
+}
+
+.steps__item[data-done='true'] {
+  color: var(--color-success-fg);
+}
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

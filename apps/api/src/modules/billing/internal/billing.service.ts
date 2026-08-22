@@ -40,6 +40,40 @@ export class BillingService {
   ) {}
 
   /**
+   * Authorise for an appointment, resolving the patient and the fee here.
+   *
+   * THE CLIENT NEVER SENDS THE AMOUNT. It is read from validated config and
+   * the patient is read from the appointment row — which RLS has already
+   * scoped, so an appointment the caller cannot see resolves to nothing and
+   * returns 404. A client-supplied amount would let a patient authorise one
+   * dinar for a consultation, and a client-supplied patient id would let them
+   * bill someone else's card.
+   */
+  async authoriseAppointment(
+    appointmentId: string,
+  ): Promise<{ paymentId: string; status: string; clientSecret?: string }> {
+    const appointment = await this.db.tx(async (tx) => {
+      const res = await tx.query<{ patient_id: string; status: string }>(
+        `SELECT patient_id, status FROM scheduling_appointments WHERE id = $1`,
+        [appointmentId],
+      );
+      return res.rows[0];
+    });
+
+    if (appointment === undefined) throw new NotFoundException('Appointment not found');
+    if (appointment.status === 'cancelled' || appointment.status === 'expired') {
+      throw new NotFoundException('Appointment is no longer open for payment');
+    }
+
+    return this.authoriseForAppointment({
+      appointmentId,
+      patientId: appointment.patient_id,
+      amountMinor: this.config.CONSULTATION_FEE_MINOR,
+      currency: this.config.PAYMENT_CURRENCY,
+    });
+  }
+
+  /**
    * Authorise payment for a booked appointment (D2, step 1).
    *
    * The idempotency key is derived from the APPOINTMENT, not generated per
@@ -147,6 +181,36 @@ export class BillingService {
    * transitions an appointment to `confirmed` — which is in turn what unlocks
    * imaging for the receiving doctor when triage is off (D3).
    */
+  /**
+   * Payment state for one appointment.
+   *
+   * Returns `none` rather than 404 when nothing has been attempted yet: the
+   * appointment legitimately exists in `pending_payment` before any
+   * authorisation, and a 404 there would be indistinguishable from an
+   * appointment the caller cannot see.
+   */
+  async statusForAppointment(
+    appointmentId: string,
+  ): Promise<{ status: string; amountMinor: number | null; currency: string | null }> {
+    return this.db.tx(async (tx) => {
+      const res = await tx.query<{ status: string; amount_minor: string; currency: string }>(
+        `SELECT status, amount_minor, currency FROM billing_payments
+         WHERE appointment_id = $1 ORDER BY created_at DESC LIMIT 1`,
+        [appointmentId],
+      );
+      const row = res.rows[0];
+      if (row === undefined) return { status: 'none', amountMinor: null, currency: null };
+      // amount_minor is bigint, which the driver hands back as a string so no
+      // precision is lost above 2^53. Convert only here, where the value is
+      // known to be a currency amount well inside safe-integer range.
+      return {
+        status: row.status,
+        amountMinor: Number(row.amount_minor),
+        currency: row.currency,
+      };
+    });
+  }
+
   async captureOnAcceptance(appointmentId: string): Promise<{ status: string }> {
     const ctx = requireContext();
 

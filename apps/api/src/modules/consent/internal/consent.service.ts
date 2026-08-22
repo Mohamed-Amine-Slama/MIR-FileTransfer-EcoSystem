@@ -122,6 +122,72 @@ export class ConsentService {
   }
 
   /**
+   * The CURRENT published terms for a locale.
+   *
+   * The UI cannot name a version — it has no way to know which is current, and
+   * hardcoding one would mean a published revision silently kept being
+   * bypassed. Latest-published wins, and the version it resolves to is
+   * returned so the client sends it back on grant(). If the two disagree
+   * because a revision landed mid-session, grant() rejects rather than filing
+   * agreement under wording the patient never saw.
+   */
+  async getCurrentTerms(locale: Locale, scope = 'cross_border_transfer'): Promise<ConsentTerms> {
+    return this.db.tx(async (tx) => {
+      const res = await tx.query<{
+        version: string;
+        locale: Locale;
+        scope: string;
+        body: string;
+        content_hash: string;
+        published_at: Date | null;
+      }>(
+        `SELECT version, locale, scope, body, content_hash, published_at
+         FROM consent_terms
+         WHERE locale = $1 AND scope = $2 AND published_at IS NOT NULL
+         ORDER BY published_at DESC
+         LIMIT 1`,
+        [locale, scope],
+      );
+      const row = res.rows[0];
+      if (row === undefined) throw new NotFoundException('Consent terms not found');
+      return {
+        version: row.version,
+        locale: row.locale,
+        scope: row.scope,
+        body: row.body,
+        contentHash: row.content_hash,
+        publishedAt: row.published_at,
+      };
+    });
+  }
+
+  /**
+   * Live consent records for a patient.
+   *
+   * `revoked_at IS NULL` only: a revoked record still exists as evidence, but
+   * it must never read back as active permission. RLS applies as usual, so a
+   * patient sees their own and nobody sees another's.
+   */
+  async listActiveForPatient(
+    patientId: string,
+  ): Promise<{ consentId: string; grantedTo: string; grantedAt: Date }[]> {
+    return this.db.tx(async (tx) => {
+      const res = await tx.query<{ id: string; granted_to: string; granted_at: Date }>(
+        `SELECT id, granted_to, granted_at
+         FROM consent_records
+         WHERE patient_id = $1 AND revoked_at IS NULL
+         ORDER BY granted_at DESC`,
+        [patientId],
+      );
+      return res.rows.map((r) => ({
+        consentId: r.id,
+        grantedTo: r.granted_to,
+        grantedAt: r.granted_at,
+      }));
+    });
+  }
+
+  /**
    * Record consent.
    *
    * The client sends back the text it displayed. We hash it and compare

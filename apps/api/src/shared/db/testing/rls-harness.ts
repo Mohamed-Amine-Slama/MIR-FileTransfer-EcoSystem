@@ -75,36 +75,84 @@ export interface Harness {
   close: () => Promise<void>;
 }
 
+export interface HarnessOptions {
+  /**
+   * Size of the `mir_app` pool.
+   *
+   * Two by default, deliberately: a dozen suites run concurrently, each with
+   * its own database but all against one PostgreSQL, and its connection budget
+   * is shared. Suites that exercise CONCURRENCY rather than authorization need
+   * more — with a pool of two, fifty "simultaneous" bookings are not
+   * simultaneous at all, they are a queue of fifty behind two connections.
+   */
+  appPoolMax?: number;
+}
+
+/**
+ * Cluster-wide mutex key for setup.
+ *
+ * Advisory locks are scoped to a DATABASE, so this lock is taken on the shared
+ * `postgres` maintenance database — the one every worker connects to anyway —
+ * and it therefore serialises workers that are otherwise each in their own
+ * test database. The arbitrary constant just has to be the same everywhere.
+ */
+const SETUP_LOCK_KEY = 8_147_221_930;
+
 /**
  * Create (or recreate) the test database, apply migrations, and give the
  * application role a login for the duration of the test run.
  */
-export async function setupTestDatabase(): Promise<Harness> {
-  // --- create the database, from the maintenance database -------------------
+export async function setupTestDatabase(options: HarnessOptions = {}): Promise<Harness> {
+  const appPoolMax = options.appPoolMax ?? 2;
+
+  /**
+   * SETUP IS SERIALISED ACROSS WORKERS, AND IT HAS TO BE.
+   *
+   * Roles live in `pg_authid`, which is a SHARED catalog: one copy for the
+   * whole cluster, not one per database. Migration 0002 re-asserts mir_app's
+   * safety attributes with ALTER ROLE, and the login password is attached
+   * below with another ALTER ROLE. Both write the same catalog tuple.
+   *
+   * PostgreSQL does not queue concurrent writers of a shared-catalog tuple —
+   * it aborts one with `tuple concurrently updated`. With four workers each
+   * migrating their own database at the same moment, that is a routine race,
+   * and it surfaced as three whole suites failing in setup with an error that
+   * looks nothing like its cause.
+   *
+   * The lock is held across CREATE DATABASE, the migrations and the ALTER
+   * ROLE. Only setup is serialised; the tests themselves still run fully in
+   * parallel.
+   */
   const admin = new Client({ connectionString: ownerUrl('postgres') });
   await admin.connect();
-  try {
-    const exists = await admin.query('SELECT 1 FROM pg_database WHERE datname = $1', [TEST_DB]);
-    if (exists.rowCount === 0) {
-      // Identifier cannot be parameterised; TEST_DB is not user input.
-      await admin.query(`CREATE DATABASE ${JSON.stringify(TEST_DB).replace(/"/g, '"')}`);
+  const owner = await (async (): Promise<Pool> => {
+    await admin.query('SELECT pg_advisory_lock($1)', [SETUP_LOCK_KEY]);
+    try {
+      const exists = await admin.query('SELECT 1 FROM pg_database WHERE datname = $1', [TEST_DB]);
+      if (exists.rowCount === 0) {
+        // Identifier cannot be parameterised; TEST_DB is not user input.
+        await admin.query(`CREATE DATABASE ${JSON.stringify(TEST_DB).replace(/"/g, '"')}`);
+      }
+
+      // --- migrate ---------------------------------------------------------
+      const migrationsDir = join(process.cwd(), 'migrations');
+      await migrateUp(ownerUrl(TEST_DB), migrationsDir);
+
+      // --- give mir_app a login for testing --------------------------------
+      // The migration deliberately creates the role NOLOGIN with no password,
+      // so no credential is committed (§6). Attaching one is an environment
+      // concern: Terraform + Secrets Manager in deployed environments, here in
+      // tests.
+      const pool = new Pool({ connectionString: ownerUrl(TEST_DB), max: 2 });
+      await pool.query(`ALTER ROLE mir_app LOGIN PASSWORD '${APP_PASSWORD}'`);
+      return pool;
+    } finally {
+      // Released even if setup failed, or every other worker hangs behind a
+      // lock that will never be freed until the connection closes.
+      await admin.query('SELECT pg_advisory_unlock($1)', [SETUP_LOCK_KEY]);
+      await admin.end();
     }
-  } finally {
-    await admin.end();
-  }
-
-  // --- migrate -------------------------------------------------------------
-  const migrationsDir = join(process.cwd(), 'migrations');
-  await migrateUp(ownerUrl(TEST_DB), migrationsDir);
-
-  // --- give mir_app a login for testing ------------------------------------
-  // The migration deliberately creates the role NOLOGIN with no password, so
-  // no credential is committed (§6). Attaching one is an environment concern:
-  // Terraform + Secrets Manager in deployed environments, here in tests.
-  // Small pools: several suites run concurrently, each against its own
-  // database, and PostgreSQL's connection budget is shared across all of them.
-  const owner = new Pool({ connectionString: ownerUrl(TEST_DB), max: 2 });
-  await owner.query(`ALTER ROLE mir_app LOGIN PASSWORD '${APP_PASSWORD}'`);
+  })();
 
   // Baseline reference data: consent_records carries a foreign key to
   // consent_terms (0003), so every suite that grants consent needs published
@@ -124,7 +172,7 @@ export async function setupTestDatabase(): Promise<Harness> {
     ],
   );
 
-  const app = new Pool({ connectionString: appUrl(TEST_DB), max: 2 });
+  const app = new Pool({ connectionString: appUrl(TEST_DB), max: appPoolMax });
 
   return {
     owner,

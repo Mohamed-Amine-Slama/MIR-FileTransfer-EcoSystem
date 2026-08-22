@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { APP_CONFIG } from '../../../shared/config/config.module';
 import type { AppConfig } from '../../../shared/config/config.schema';
 import { requireContext } from '../../../shared/context/request-context';
@@ -28,6 +28,41 @@ import { EventBus } from '../../../shared/events/event-bus';
 const EXCLUSION_VIOLATION = '23P01';
 const UNIQUE_VIOLATION = '23505';
 
+/**
+ * Transient concurrency failures, as opposed to genuine conflicts.
+ *
+ * 40P01 deadlock_detected, 40001 serialization_failure.
+ *
+ * These are NOT the same as "someone else took the slot". A deadlock means the
+ * database aborted one transaction to break a lock cycle — with a gist
+ * exclusion constraint plus RLS policy subqueries, 50 simultaneous bookings
+ * genuinely produce lock cycles. The transaction is rolled back cleanly and
+ * retrying is both safe and correct: the slot may still be free.
+ *
+ * Left unhandled, a deadlock propagates as a raw driver error and the losing
+ * patient gets a 500 — exactly what P10.2 forbids ("a clean conflict error,
+ * not a 500").
+ */
+const TRANSIENT_CONFLICTS = new Set(['40P01', '40001']);
+
+/** Bounded retries. A slot under this much contention resolves in a few. */
+const MAX_BOOKING_ATTEMPTS = 5;
+
+/**
+ * Connection-pool exhaustion, which is transient in the same way.
+ *
+ * Under heavy contention the pool can be fully checked out and `connect()`
+ * times out. That error carries no SQLSTATE, so the code check above misses
+ * it and a raw driver message reaches the caller — the same "raw database
+ * error escapes" failure the deadlock case had, arriving by a different door.
+ */
+function isTransientConnectionFailure(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /timeout exceeded when trying to connect|Connection terminated|too many clients/i.test(
+    message,
+  );
+}
+
 export interface AvailabilityWindow {
   id: string;
   doctorId: string;
@@ -54,6 +89,44 @@ export interface Appointment {
   status: string;
 }
 
+/** An appointment plus the names the UI needs, so it need not fan out. */
+export interface AppointmentSummary extends Appointment {
+  patientName: string;
+  doctorName: string;
+  studyIds?: string[];
+}
+
+export interface DoctorSummary {
+  id: string;
+  displayName: string;
+  specialty: string | null;
+  city: string | null;
+}
+
+interface AppointmentRow {
+  id: string;
+  patient_id: string;
+  doctor_id: string;
+  starts_at: Date;
+  ends_at: Date;
+  status: string;
+  patient_name: string;
+  doctor_name: string;
+}
+
+function toSummary(row: AppointmentRow): AppointmentSummary {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    doctorId: row.doctor_id,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    status: row.status,
+    patientName: row.patient_name,
+    doctorName: row.doctor_name,
+  };
+}
+
 export class SlotUnavailableError extends ConflictException {
   constructor() {
     super('That appointment slot is no longer available');
@@ -62,6 +135,8 @@ export class SlotUnavailableError extends ConflictException {
 
 @Injectable()
 export class SchedulingService {
+  private readonly logger = new Logger(SchedulingService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly bus: EventBus,
@@ -173,6 +248,40 @@ export class SchedulingService {
       throw new ConflictException('Appointment must end after it starts');
     }
 
+    let lastTransient: unknown;
+    for (let attempt = 1; attempt <= MAX_BOOKING_ATTEMPTS; attempt++) {
+      try {
+        return await this.attemptBooking(input, ctx);
+      } catch (err) {
+        const code = (err as { code?: string }).code;
+        const transient =
+          (code !== undefined && TRANSIENT_CONFLICTS.has(code)) ||
+          isTransientConnectionFailure(err);
+        if (transient) {
+          lastTransient = err;
+          // Jittered backoff. Without jitter the same set of transactions
+          // collide again on the next attempt, in the same order.
+          await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 25) + attempt * 10));
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    // Exhausted retries under sustained contention. Report it as a conflict —
+    // it is one, from the patient's point of view — rather than a 500.
+    this.logger.warn(
+      `booking gave up after ${MAX_BOOKING_ATTEMPTS} attempts under contention: ` +
+        `${(lastTransient as { code?: string })?.code ?? 'connection'}`,
+    );
+    // Still a clean conflict, never a raw driver error (P10.2).
+    throw new SlotUnavailableError();
+  }
+
+  private async attemptBooking(
+    input: BookingInput,
+    ctx: ReturnType<typeof requireContext>,
+  ): Promise<Appointment> {
     const appointment = await this.db.tx(async (tx: Tx) => {
       let inserted;
       try {
@@ -268,6 +377,137 @@ export class SchedulingService {
     });
 
     return appointment;
+  }
+
+  // -------------------------------------------------------------------------
+  // Reads for the UI
+  //
+  // NONE of these filter by caller. Every one is scoped by row-level security:
+  // a patient sees their own appointments, a Tunisian doctor sees the ones
+  // referred to them, and neither can widen that by changing a parameter,
+  // because there is no parameter to change. Adding `WHERE patient_id =
+  // $currentUser` here would look safer and would in fact be WEAKER — it would
+  // move the decision out of the database and into a line of code that a later
+  // refactor can drop (ADR-6).
+  // -------------------------------------------------------------------------
+
+  /** Appointments visible to the caller, soonest first. */
+  async listAppointments(): Promise<AppointmentSummary[]> {
+    return this.db.tx(async (tx) => {
+      const res = await tx.query<AppointmentRow>(
+        `SELECT a.id, a.patient_id, a.doctor_id, a.starts_at, a.ends_at, a.status,
+                p.full_name AS patient_name, d.full_name AS doctor_name
+         FROM scheduling_appointments a
+         JOIN patients_patients p ON p.id = a.patient_id
+         JOIN identity_users d ON d.id = a.doctor_id
+         ORDER BY a.starts_at DESC`,
+      );
+      return res.rows.map(toSummary);
+    });
+  }
+
+  /** One appointment, with its linked studies. 404 when not visible. */
+  async getAppointment(appointmentId: string): Promise<AppointmentSummary> {
+    return this.db.tx(async (tx) => {
+      const res = await tx.query<AppointmentRow>(
+        `SELECT a.id, a.patient_id, a.doctor_id, a.starts_at, a.ends_at, a.status,
+                p.full_name AS patient_name, d.full_name AS doctor_name
+         FROM scheduling_appointments a
+         JOIN patients_patients p ON p.id = a.patient_id
+         JOIN identity_users d ON d.id = a.doctor_id
+         WHERE a.id = $1`,
+        [appointmentId],
+      );
+      const row = res.rows[0];
+      // 404 rather than 403 for a row RLS filtered: §6 requires that "does not
+      // exist" and "not yours" be indistinguishable.
+      if (row === undefined) throw new NotFoundException('Appointment not found');
+
+      const studies = await tx.query<{ study_id: string }>(
+        `SELECT study_id FROM scheduling_appointment_studies WHERE appointment_id = $1`,
+        [appointmentId],
+      );
+      return { ...toSummary(row), studyIds: studies.rows.map((s) => s.study_id) };
+    });
+  }
+
+  /**
+   * Verified Tunisian doctors, for the patient's choice of referral.
+   *
+   * `verified_at IS NOT NULL` is not cosmetic. The decisions file records that
+   * a Tunisian doctor's access is a restricted transfer under Chapter V, and
+   * that verified_at must not be set without the transfer safeguards in place.
+   * Filtering on it here means an unverified doctor cannot be selected, so no
+   * imaging can be routed to one.
+   */
+  async listDoctors(): Promise<DoctorSummary[]> {
+    return this.db.tx(async (tx) => {
+      const res = await tx.query<{
+        id: string;
+        full_name: string;
+        specialty: string | null;
+        clinic_name: string | null;
+      }>(
+        `SELECT u.id, u.full_name, p.specialty, p.clinic_name
+         FROM identity_users u
+         JOIN identity_doctor_profiles p ON p.user_id = u.id
+         WHERE u.role = 'tunisia_doctor'
+           AND u.status = 'active'
+           AND p.verified_at IS NOT NULL
+         ORDER BY u.full_name`,
+      );
+      return res.rows.map((r) => ({
+        id: r.id,
+        displayName: r.full_name,
+        specialty: r.specialty,
+        city: r.clinic_name,
+      }));
+    });
+  }
+
+  /** The calling doctor's own published availability windows. */
+  async listAvailability(): Promise<AvailabilityWindow[]> {
+    return this.db.tx(async (tx) => {
+      const res = await tx.query<{
+        id: string;
+        doctor_id: string;
+        starts_at: Date;
+        ends_at: Date;
+        slot_minutes: number;
+      }>(
+        `SELECT id, doctor_id, starts_at, ends_at, slot_minutes
+         FROM scheduling_availability
+         ORDER BY starts_at`,
+      );
+      return res.rows.map((r) => ({
+        id: r.id,
+        doctorId: r.doctor_id,
+        startsAt: r.starts_at,
+        endsAt: r.ends_at,
+        slotMinutes: r.slot_minutes,
+      }));
+    });
+  }
+
+  /**
+   * The receiving doctor declines a referral.
+   *
+   * Distinct from cancel() only in intent, but the distinction matters to the
+   * patient: a declined referral must release the authorisation so they are
+   * not charged and the held funds return. The release itself is billing's
+   * job, triggered off the resulting state.
+   */
+  async decline(appointmentId: string): Promise<void> {
+    const changed = await this.db.tx(async (tx) => {
+      const res = await tx.query(
+        `UPDATE scheduling_appointments
+         SET status = 'cancelled'
+         WHERE id = $1 AND status IN ('pending_payment', 'authorised')`,
+        [appointmentId],
+      );
+      return res.rowCount ?? 0;
+    });
+    if (changed === 0) throw new NotFoundException('Appointment not found');
   }
 
   /** Cancel an appointment, freeing the slot for someone else. */

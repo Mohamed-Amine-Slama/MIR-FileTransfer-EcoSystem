@@ -30,9 +30,65 @@ export interface AuditRecord {
   metadata: Record<string, unknown>;
 }
 
+export interface AuditEventSummary {
+  id: string;
+  occurredAt: Date;
+  actorUserId: string | null;
+  actorRole: string | null;
+  action: string;
+  resourceType: string;
+  outcome: 'allowed' | 'denied';
+}
+
 @Injectable()
 export class AuditService {
   constructor(private readonly db: DatabaseService) {}
+
+  /**
+   * Recent audit events, newest first — the admin review screen.
+   *
+   * READ-ONLY BY CONSTRUCTION. There is no update or delete counterpart in
+   * this service and there cannot usefully be one: the application role holds
+   * no UPDATE or DELETE grant on audit_events (migration 0002), so the
+   * database would refuse. The append-only property is enforced by privilege,
+   * not by the absence of a method.
+   *
+   * `granted` is read out of metadata rather than a column. Denials carry no
+   * subject_id — the row was invisible, which is the whole point — so the
+   * outcome lives with the rest of the attempt's detail.
+   */
+  async recent(limit: number): Promise<AuditEventSummary[]> {
+    return this.db.tx(async (tx) => {
+      const res = await tx.query<{
+        id: string;
+        occurred_at: Date;
+        actor_id: string | null;
+        actor_role: string | null;
+        action: string;
+        subject_type: string;
+        granted: boolean | null;
+      }>(
+        `SELECT id, occurred_at, actor_id, actor_role, action, subject_type,
+                (metadata->>'granted')::boolean AS granted
+         FROM audit_events
+         ORDER BY occurred_at DESC
+         LIMIT $1`,
+        [limit],
+      );
+
+      return res.rows.map((r) => ({
+        id: r.id,
+        occurredAt: r.occurred_at,
+        actorUserId: r.actor_id,
+        actorRole: r.actor_role,
+        action: r.action,
+        resourceType: r.subject_type,
+        // Events that carry no `granted` flag are actions that happened, so
+        // they read as allowed. Only an explicit false is a denial.
+        outcome: r.granted === false ? ('denied' as const) : ('allowed' as const),
+      }));
+    });
+  }
 
   /**
    * Write one audit row.

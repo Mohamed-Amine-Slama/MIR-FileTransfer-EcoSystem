@@ -31,6 +31,24 @@ export interface AuthorisedStudy {
   patientId: string;
 }
 
+export interface StudySummary {
+  id: string;
+  studyInstanceUid: string;
+  description: string | null;
+  studyDate: string | null;
+  modality: string;
+  instanceCount: number;
+}
+
+interface StudyRow {
+  id: string;
+  study_instance_uid: string;
+  description: string | null;
+  study_date: string | null;
+  modality: string;
+  file_count: number;
+}
+
 @Injectable()
 export class StudyAccessService {
   constructor(
@@ -38,6 +56,54 @@ export class StudyAccessService {
     private readonly bus: EventBus,
     private readonly signedUrls: SignedUrlService,
   ) {}
+
+  /**
+   * List studies for the worklist, scoped by patient or by appointment.
+   *
+   * No audit event is written here, and that is deliberate: this returns
+   * headers — description, date, counts — and never pixel data or metadata for
+   * a specific image. `StudyAccessed` means someone LOOKED at a scan, and
+   * diluting it with every list render would make the anomaly sweep in P4.5
+   * useless for spotting a doctor working through studies they shouldn't.
+   *
+   * Visibility is still RLS's decision, including the D3 payment gate: a
+   * Tunisian doctor listing by appointment sees nothing until the appointment
+   * is confirmed.
+   */
+  async listStudies(filter: { patientId?: string; appointmentId?: string }): Promise<StudySummary[]> {
+    return this.db.tx(async (tx) => {
+      const rows =
+        filter.appointmentId !== undefined
+          ? await tx.query<StudyRow>(
+              `SELECT s.id, s.study_instance_uid, s.description, s.study_date,
+                      s.modality, s.file_count
+               FROM imaging_studies s
+               JOIN scheduling_appointment_studies l ON l.study_id = s.id
+               WHERE l.appointment_id = $1
+               ORDER BY s.study_date DESC NULLS LAST`,
+              [filter.appointmentId],
+            )
+          : await tx.query<StudyRow>(
+              `SELECT s.id, s.study_instance_uid, s.description, s.study_date,
+                      s.modality, s.file_count
+               FROM imaging_studies s
+               WHERE s.patient_id = $1
+               ORDER BY s.study_date DESC NULLS LAST`,
+              [filter.patientId],
+            );
+
+      return rows.rows.map((r) => ({
+        id: r.id,
+        studyInstanceUid: r.study_instance_uid,
+        description: r.description,
+        // DATE columns are parsed as plain strings (see pg-types) so a study
+        // dated 2025-01-14 never shifts a day by timezone.
+        studyDate: r.study_date,
+        modality: r.modality,
+        instanceCount: r.file_count,
+      }));
+    });
+  }
 
   /**
    * Resolve a study the caller is allowed to see, or throw 404.

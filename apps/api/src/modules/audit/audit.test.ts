@@ -175,7 +175,18 @@ describe('P4.4 audit module', () => {
     expect(methods).not.toContain('update');
     expect(methods).not.toContain('delete');
     expect(methods).not.toContain('remove');
-    expect(methods.filter((m) => m !== 'constructor').sort()).toEqual(['record', 'recordEvent']);
+
+    // The full surface is pinned, not just the forbidden names, so that ADDING
+    // a method to this service is a decision someone has to make here rather
+    // than something that slips in. `recent` is a READ — it backs the admin
+    // review screen (P6) and writes nothing. If a future method belongs in
+    // this list, the question to answer first is whether it can mutate a row
+    // that has already been written; if it can, it does not belong at all.
+    expect(methods.filter((m) => m !== 'constructor').sort()).toEqual([
+      'recent',
+      'record',
+      'recordEvent',
+    ]);
   });
 
   describe('subscriptions', () => {
