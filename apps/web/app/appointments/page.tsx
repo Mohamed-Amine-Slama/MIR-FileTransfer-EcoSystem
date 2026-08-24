@@ -6,7 +6,20 @@ import { api, type Appointment } from '../../lib/api/endpoints';
 import { useDateFormat, useT } from '../../lib/i18n/provider';
 import { RoleGate } from '../../components/RoleGate';
 import { AppointmentStatusBadge } from '../../components/AppointmentStatusBadge';
-import { Alert, EmptyState, PageHeader, Spinner } from '../../components/ui';
+import {
+  Alert,
+  EmptyState,
+  Main,
+  PageHeader,
+  Spinner,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  buttonVariants,
+} from '../../components/ui';
 
 /** Appointment list for patients and referring doctors. */
 export default function AppointmentsPage(): React.JSX.Element {
@@ -37,11 +50,11 @@ function AppointmentsList(): React.JSX.Element {
   }, [t]);
 
   return (
-    <main className="page--wide stack">
+    <Main wide>
       <PageHeader
         title={t.appointmentsTitle}
         actions={
-          <Link href="/appointments/new" className="btn btn--primary" data-testid="new-appointment">
+          <Link href="/appointments/new" className={buttonVariants()} data-testid="new-appointment">
             {t.bookingTitle}
           </Link>
         }
@@ -54,18 +67,34 @@ function AppointmentsList(): React.JSX.Element {
       ) : appointments.length === 0 ? (
         <EmptyState testId="appointments-empty">{t.appointmentsEmpty}</EmptyState>
       ) : (
-        <ul className="list" data-testid="appointment-list">
-          {appointments.map((a) => (
-            <li key={a.id} className="list__item" data-testid="appointment-row" data-status={a.status}>
-              <Link href={`/appointments/${a.id}`} style={{ flex: 1 }}>
-                {formatDate(a.startsAt)}
-              </Link>
-              <span className="muted small">{a.doctorName ?? a.doctorId}</span>
-              <AppointmentStatusBadge status={a.status} />
-            </li>
-          ))}
-        </ul>
+        <Table data-testid="appointment-list">
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t.colDate}</TableHead>
+              <TableHead>{t.bookingDoctor}</TableHead>
+              <TableHead>{t.appointmentStatus}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {appointments.map((a) => (
+              <TableRow key={a.id} data-testid="appointment-row" data-status={a.status}>
+                <TableCell className="font-medium">
+                  <Link
+                    href={`/appointments/${a.id}`}
+                    className="rounded-sm hover:text-primary hover:underline"
+                  >
+                    {formatDate(a.startsAt)}
+                  </Link>
+                </TableCell>
+                <TableCell className="text-muted-foreground">{a.doctorName ?? a.doctorId}</TableCell>
+                <TableCell>
+                  <AppointmentStatusBadge status={a.status} />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
-    </main>
+    </Main>
   );
 }

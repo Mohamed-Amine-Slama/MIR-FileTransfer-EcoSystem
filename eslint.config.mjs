@@ -103,6 +103,35 @@ export default tseslint.config(
     },
   },
 
+
+  {
+    // DECISION D4, ported to Tailwind: physical-direction utilities do not
+    // flip under `dir`, so Arabic and French would silently diverge. Only the
+    // logical spellings are allowed (ps/pe, ms/me, start/end, text-start,
+    // border-s/e, rounded-s/e). This is the same rule globals.css used to
+    // state in prose, now enforced.
+    files: ['apps/web/**/*.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "Literal[value=/(^|[\\s:'\"])-?((pl|pr|ml|mr|left|right|border-l|border-r|rounded-l|rounded-r|rounded-tl|rounded-tr|rounded-bl|rounded-br)-|text-left\\b|text-right\\b)/]",
+          message:
+            'Physical-direction Tailwind utility. Use the logical spelling instead ' +
+            '(ps/pe, ms/me, start/end, text-start/text-end, border-s/border-e, rounded-s/rounded-e) — DECISION D4.',
+        },
+        {
+          selector:
+            "TemplateElement[value.cooked=/(^|[\\s:'\"])-?((pl|pr|ml|mr|left|right|border-l|border-r|rounded-l|rounded-r|rounded-tl|rounded-tr|rounded-bl|rounded-br)-|text-left\\b|text-right\\b)/]",
+          message:
+            'Physical-direction Tailwind utility. Use the logical spelling instead ' +
+            '(ps/pe, ms/me, start/end, text-start/text-end, border-s/border-e, rounded-s/rounded-e) — DECISION D4.',
+        },
+      ],
+    },
+  },
+
   {
     files: ['**/*.mjs', '**/*.cjs', 'scripts/**/*.mjs', 'test-data/**/*.mjs'],
     rules: {

@@ -2,10 +2,27 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import { ChevronRight, UserRoundPlus } from 'lucide-react';
 import { api, type Patient } from '../../lib/api/endpoints';
 import { useT } from '../../lib/i18n/provider';
 import { RoleGate } from '../../components/RoleGate';
-import { Alert, Button, EmptyState, Field, Input, PageHeader, Spinner } from '../../components/ui';
+import {
+  Alert,
+  Button,
+  EmptyState,
+  Field,
+  Input,
+  Main,
+  PageHeader,
+  Spinner,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  buttonVariants,
+} from '../../components/ui';
 
 /**
  * Patient worklist — BUILD_SPEC P5.1 / P3.3.
@@ -72,25 +89,26 @@ function PatientsList(): React.JSX.Element {
   };
 
   return (
-    <main className="page--wide stack">
+    <Main wide>
       <PageHeader
         title={t.patientsTitle}
         description={t.patientsDescription}
         actions={
-          <Link href="/patients/new" className="btn btn--primary" data-testid="new-patient">
+          <Link href="/patients/new" className={buttonVariants()} data-testid="new-patient">
+            <UserRoundPlus aria-hidden="true" />
             {t.patientsNew}
           </Link>
         }
       />
 
       <form
-        className="row"
+        className="flex flex-wrap items-end gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           void search();
         }}
       >
-        <div style={{ flex: 1, minInlineSize: '14rem' }}>
+        <div className="min-w-56 flex-1 sm:max-w-sm">
           <Field label={t.patientsSearchPhone}>
             <Input
               data-testid="phone-search"
@@ -115,18 +133,37 @@ function PatientsList(): React.JSX.Element {
           {searched ? t.patientsNoMatch : t.patientsEmpty}
         </EmptyState>
       ) : (
-        <ul className="list" data-testid="patient-list">
-          {patients.map((p) => (
-            <li key={p.id} className="list__item" data-testid="patient-row">
-              <Link href={`/patients/${p.id}`} style={{ flex: 1 }}>
-                {p.fullName}
-              </Link>
-              <span className="muted small">{p.phoneE164}</span>
-              <span className="muted small">{p.dateOfBirth}</span>
-            </li>
-          ))}
-        </ul>
+        <Table data-testid="patient-list">
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t.patientName}</TableHead>
+              <TableHead>{t.patientsSearchPhone}</TableHead>
+              <TableHead>{t.patientDob}</TableHead>
+              <TableHead className="w-10">
+                <span className="sr-only">{t.colActions}</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {patients.map((p) => (
+              <TableRow key={p.id} data-testid="patient-row">
+                <TableCell className="font-medium">
+                  <Link href={`/patients/${p.id}`} className="rounded-sm hover:text-primary hover:underline">
+                    {p.fullName}
+                  </Link>
+                </TableCell>
+                <TableCell dir="ltr" className="text-muted-foreground">
+                  {p.phoneE164}
+                </TableCell>
+                <TableCell className="text-muted-foreground">{p.dateOfBirth}</TableCell>
+                <TableCell>
+                  <ChevronRight className="size-4 text-muted-foreground rtl:rotate-180" aria-hidden="true" />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
-    </main>
+    </Main>
   );
 }

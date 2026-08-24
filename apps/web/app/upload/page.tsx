@@ -1,13 +1,24 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { FolderUp } from 'lucide-react';
 import { api, type Patient } from '../../lib/api/endpoints';
 import { createUploadApi } from '../../lib/upload/api-client';
 import { queueDb, type QueuedFile } from '../../lib/upload/queue-db';
 import { Uploader } from '../../lib/upload/uploader';
 import { useT } from '../../lib/i18n/provider';
+import type { Dictionary } from '../../lib/i18n/dictionary';
 import { RoleGate } from '../../components/RoleGate';
-import { Field, Select } from '../../components/ui';
+import {
+  Alert,
+  Badge,
+  Card,
+  Field,
+  Main,
+  PageHeader,
+  Progress,
+  Select,
+} from '../../components/ui';
 
 /**
  * Upload screen — BUILD_SPEC P7.3.
@@ -33,7 +44,7 @@ export default function UploadPage() {
 function UploadScreen() {
   const t = useT();
   const [files, setFiles] = useState<QueuedFile[]>([]);
-  const [resumeNotice, setResumeNotice] = useState<string | null>(null);
+  const [resumeCount, setResumeCount] = useState<number | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [patientId, setPatientId] = useState('');
   const uploaderRef = useRef<Uploader | null>(null);
@@ -53,7 +64,7 @@ function UploadScreen() {
       if (cancelled) return;
       setFiles(await queueDb.all());
       if (outstanding.length > 0) {
-        setResumeNotice(`Resuming ${outstanding.length} file(s) from the previous session`);
+        setResumeCount(outstanding.length);
         void getUploader().start();
       }
     })();
@@ -95,113 +106,130 @@ function UploadScreen() {
   const totalBytes = files.reduce((sum, f) => sum + f.sizeBytes, 0);
   const doneBytes = files.reduce((sum, f) => sum + f.uploadedBytes, 0);
   const pct = totalBytes === 0 ? 0 : Math.round((doneBytes / totalBytes) * 100);
+  const doneCount = files.filter((f) => f.status === 'done').length;
 
   return (
-    <main>
-      <h1>رفع الصور الطبية</h1>
-      <p style={{ color: 'var(--color-muted)' }}>
-        اختر مجلد الدراسة من القرص. يمكن إغلاق المتصفح — سيستأنف الرفع تلقائيًا.
-      </p>
+    <Main wide>
+      <PageHeader title={t.uploadTitle} description={t.uploadHint} />
 
-      {resumeNotice !== null && (
-        <p data-testid="resume-notice" style={banner}>
-          {resumeNotice}
-        </p>
+      {resumeCount !== null && (
+        <div data-testid="resume-notice">
+          <Alert tone="warning">
+            {t.uploadResumeNotice} ({resumeCount})
+          </Alert>
+        </div>
       )}
 
-      {/* The study is attached to a patient record at the moment the session
-          is created, not afterwards. An upload with no owner would be imaging
-          that RLS cannot scope to anyone — unreachable, and undeletable by the
-          application role. */}
-      <div style={{ marginBlock: '1rem' }}>
-        <Field label={t.patientsTitle}>
-          <Select
-            data-testid="patient-select"
-            value={patientId}
-            onChange={(e) => setPatientId(e.target.value)}
-          >
-            <option value="">—</option>
-            {patients.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.fullName} · {p.phoneE164}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      </div>
+      <Card>
+        {/* The study is attached to a patient record at the moment the session
+            is created, not afterwards. An upload with no owner would be imaging
+            that RLS cannot scope to anyone — unreachable, and undeletable by the
+            application role. */}
+        <div className="max-w-md">
+          <Field label={t.colPatient}>
+            <Select
+              data-testid="patient-select"
+              value={patientId}
+              onChange={(e) => setPatientId(e.target.value)}
+            >
+              <option value="">—</option>
+              {patients.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.fullName} · {p.phoneE164}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
 
-      <label style={{ display: 'block', marginBlock: '1rem' }}>
-        {/* webkitdirectory: a study is a FOLDER of many files, often
-            extensionless, often under DICOM/ or IMAGES/ on a clinic CD. */}
-        <input
-          data-testid="folder-input"
-          type="file"
-          multiple
-          // @ts-expect-error — non-standard but universally supported attribute
-          webkitdirectory=""
-          directory=""
-          onChange={(e) => void onFolderSelected(e)}
-        />
-      </label>
+        <label
+          className={
+            patientId === ''
+              ? 'block cursor-not-allowed opacity-55'
+              : 'block cursor-pointer'
+          }
+        >
+          <span className="mb-1.5 block text-sm font-semibold">{t.uploadFolderLabel}</span>
+          <span className="flex flex-col items-center gap-2 rounded-lg border-2 border-dashed bg-muted/40 px-4 py-10 text-center transition-colors hover:border-primary">
+            <FolderUp className="size-8 text-muted-foreground" aria-hidden="true" />
+            <span className="text-sm text-muted-foreground">{t.uploadDropHint}</span>
+          </span>
+          {/* webkitdirectory: a study is a FOLDER of many files, often
+              extensionless, often under DICOM/ or IMAGES/ on a clinic CD. */}
+          <input
+            data-testid="folder-input"
+            type="file"
+            multiple
+            className="sr-only"
+            disabled={patientId === ''}
+            // @ts-expect-error — non-standard but universally supported attribute
+            webkitdirectory=""
+            directory=""
+            onChange={(e) => void onFolderSelected(e)}
+          />
+        </label>
+      </Card>
 
-      <div data-testid="overall-progress" data-percent={pct} style={{ marginBlock: '1rem' }}>
-        <strong>{pct}%</strong> — {files.filter((f) => f.status === 'done').length} /{' '}
-        {files.length} ملف
-      </div>
-
-      <ul data-testid="file-list" style={{ listStyle: 'none', padding: 0 }}>
-        {files.map((f) => (
-          <li
-            key={f.id}
-            data-testid="file-row"
-            data-status={f.status}
-            data-name={f.relativePath}
-            style={row}
-          >
-            <span style={{ flex: 1, wordBreak: 'break-all' }}>{f.relativePath}</span>
-            <span style={{ color: 'var(--color-muted)' }}>{statusLabel(f)}</span>
-            {f.lastError !== null && (
-              <span data-testid="file-error" style={{ color: 'var(--color-warning-fg)' }}>
-                {f.lastError}
+      {files.length > 0 && (
+        <Card title={t.uploadFiles}>
+          <div data-testid="overall-progress" data-percent={pct} className="space-y-1.5">
+            <div className="flex items-baseline justify-between gap-3 text-sm">
+              <strong className="text-lg tabular-nums">{pct}%</strong>
+              <span className="tabular-nums text-muted-foreground">
+                {doneCount} / {files.length}
               </span>
-            )}
-          </li>
-        ))}
-      </ul>
-    </main>
+            </div>
+            <Progress value={pct} aria-label={t.uploadFiles} />
+          </div>
+
+          <ul data-testid="file-list" className="divide-y rounded-md border">
+            {files.map((f) => (
+              <li
+                key={f.id}
+                data-testid="file-row"
+                data-status={f.status}
+                data-name={f.relativePath}
+                className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm"
+              >
+                <span className="min-w-0 flex-1 break-all font-medium">{f.relativePath}</span>
+                <StatusBadge file={f} t={t} />
+                {f.lastError !== null && (
+                  <span data-testid="file-error" className="text-xs text-warning">
+                    {f.lastError}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+    </Main>
   );
 }
 
-function statusLabel(f: QueuedFile): string {
-  switch (f.status) {
+function StatusBadge({ file, t }: { file: QueuedFile; t: Dictionary }): React.JSX.Element {
+  switch (file.status) {
     case 'done':
-      return 'تم';
+      return <Badge tone="success">{t.uploadStatusDone}</Badge>;
     case 'uploading':
-      return `${Math.round((f.uploadedBytes / Math.max(1, f.sizeBytes)) * 100)}%`;
+      return (
+        <Badge tone="info">
+          {Math.round((file.uploadedBytes / Math.max(1, file.sizeBytes)) * 100)}%
+        </Badge>
+      );
     case 'verifying':
-      return 'جارٍ التحقق';
+      return <Badge tone="info">{t.uploadStatusVerifying}</Badge>;
     case 'retrying':
-      return `إعادة المحاولة (${f.attempts})`;
+      return (
+        <Badge tone="warning">
+          {t.uploadStatusRetrying} ({file.attempts})
+        </Badge>
+      );
     case 'needs_reselect':
-      return 'أعد اختيار المجلد';
+      return <Badge tone="warning">{t.uploadStatusReselect}</Badge>;
     case 'failed':
-      return 'فشل';
+      return <Badge tone="danger">{t.uploadStatusFailed}</Badge>;
     default:
-      return 'في الانتظار';
+      return <Badge>{t.uploadStatusWaiting}</Badge>;
   }
 }
-
-const banner: React.CSSProperties = {
-  background: 'var(--color-warning-bg)',
-  color: 'var(--color-warning-fg)',
-  padding: '0.75rem 1rem',
-  borderRadius: '0.5rem',
-};
-
-const row: React.CSSProperties = {
-  display: 'flex',
-  gap: '1rem',
-  alignItems: 'center',
-  paddingBlock: '0.4rem',
-  borderBottom: '1px solid var(--color-border)',
-};

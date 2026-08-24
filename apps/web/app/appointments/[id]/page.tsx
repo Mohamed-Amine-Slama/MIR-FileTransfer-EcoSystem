@@ -7,7 +7,17 @@ import { api, type Appointment, type Study } from '../../../lib/api/endpoints';
 import { useDateFormat, useT } from '../../../lib/i18n/provider';
 import { RoleGate } from '../../../components/RoleGate';
 import { AppointmentStatusBadge } from '../../../components/AppointmentStatusBadge';
-import { Alert, Button, Card, EmptyState, PageHeader, Spinner } from '../../../components/ui';
+import {
+  Alert,
+  Breadcrumbs,
+  Button,
+  Card,
+  EmptyState,
+  Main,
+  PageHeader,
+  Spinner,
+  buttonVariants,
+} from '../../../components/ui';
 
 /**
  * Appointment detail, including payment authorisation.
@@ -102,19 +112,19 @@ function AppointmentDetail({ appointmentId }: { appointmentId: string }): React.
 
   if (error !== null && appointment === null) {
     return (
-      <main>
+      <Main>
         <Alert tone="danger" testId="appointment-error">
           {error}
         </Alert>
-      </main>
+      </Main>
     );
   }
 
   if (appointment === null) {
     return (
-      <main>
+      <Main>
         <Spinner label={t.loading} />
-      </main>
+      </Main>
     );
   }
 
@@ -122,7 +132,13 @@ function AppointmentDetail({ appointmentId }: { appointmentId: string }): React.
   const imagingLocked = appointment.status === 'pending_payment' || appointment.status === 'expired';
 
   return (
-    <main className="stack" data-testid="appointment-detail" data-status={appointment.status}>
+    <Main data-testid="appointment-detail" data-status={appointment.status}>
+      <Breadcrumbs
+        items={[
+          { label: t.appointmentsTitle, href: '/appointments' },
+          { label: formatDate(appointment.startsAt) },
+        ]}
+      />
       <PageHeader
         title={formatDate(appointment.startsAt)}
         description={appointment.doctorName ?? appointment.doctorId}
@@ -133,27 +149,31 @@ function AppointmentDetail({ appointmentId }: { appointmentId: string }): React.
       {error !== null && <Alert tone="danger">{error}</Alert>}
 
       {awaitingPayment && (
-        <Card title={t.checkoutTitle}>
-          <div className="stack-sm">
-            <Alert tone="info" testId="capture-explanation">
-              {t.checkoutDescription}
-            </Alert>
-            {payment?.amountMinor != null && (
-              <p data-testid="payment-amount">
-                <strong>{t.checkoutAmount}:</strong>{' '}
-                {/* Minor units throughout, converted only for display. */}
-                {(payment.amountMinor / 100).toFixed(2)} {payment.currency ?? ''}
-              </p>
-            )}
-            <Button
-              variant="primary"
-              data-testid="authorise-payment"
-              disabled={busy}
-              onClick={() => void authorise()}
-            >
-              {t.checkoutPay}
-            </Button>
-          </div>
+        <Card title={t.checkoutTitle} className="border-info/40">
+          <Alert tone="info" testId="capture-explanation">
+            {t.checkoutDescription}
+          </Alert>
+          {payment?.amountMinor != null && (
+            <p data-testid="payment-amount" className="flex items-baseline gap-2">
+              <span className="text-sm text-muted-foreground">{t.checkoutAmount}:</span>{' '}
+              {/* Minor units throughout, converted only for display. */}
+              <span className="text-2xl font-bold tabular-nums">
+                {(payment.amountMinor / 100).toFixed(2)}
+              </span>{' '}
+              <span className="text-sm font-medium text-muted-foreground">
+                {payment.currency ?? ''}
+              </span>
+            </p>
+          )}
+          <Button
+            variant="primary"
+            className="h-11 w-full sm:w-auto"
+            data-testid="authorise-payment"
+            disabled={busy}
+            onClick={() => void authorise()}
+          >
+            {t.checkoutPay}
+          </Button>
         </Card>
       )}
 
@@ -165,11 +185,16 @@ function AppointmentDetail({ appointmentId }: { appointmentId: string }): React.
         ) : studies.length === 0 ? (
           <EmptyState>{t.none}</EmptyState>
         ) : (
-          <ul className="list" data-testid="appointment-studies">
+          <ul className="divide-y rounded-md border" data-testid="appointment-studies">
             {studies.map((s) => (
-              <li key={s.id} className="list__item">
-                <span style={{ flex: 1 }}>{s.description ?? s.studyInstanceUid}</span>
-                <Link className="btn btn--sm" href={`/viewer/${s.studyInstanceUid}`}>
+              <li key={s.id} className="flex flex-wrap items-center gap-3 px-3 py-2">
+                <span className="flex-1 text-sm font-medium">
+                  {s.description ?? s.studyInstanceUid}
+                </span>
+                <Link
+                  className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                  href={`/viewer/${s.studyInstanceUid}`}
+                >
                   {t.inboxViewStudies}
                 </Link>
               </li>
@@ -179,10 +204,17 @@ function AppointmentDetail({ appointmentId }: { appointmentId: string }): React.
       </Card>
 
       {appointment.status !== 'cancelled' && appointment.status !== 'expired' && (
-        <Button variant="danger" data-testid="cancel-appointment" disabled={busy} onClick={() => void cancel()}>
-          {t.cancel}
-        </Button>
+        <div>
+          <Button
+            variant="danger"
+            data-testid="cancel-appointment"
+            disabled={busy}
+            onClick={() => void cancel()}
+          >
+            {t.cancel}
+          </Button>
+        </div>
       )}
-    </main>
+    </Main>
   );
 }

@@ -4,14 +4,16 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { ApiError } from '../../../lib/api/client';
 import { api, type Doctor, type Slot, type Study } from '../../../lib/api/endpoints';
-import { useDateFormat, useT } from '../../../lib/i18n/provider';
+import { useDateFormat, useLocale, useT } from '../../../lib/i18n/provider';
 import { useSession } from '../../../lib/session/session';
 import { RoleGate } from '../../../components/RoleGate';
 import {
   Alert,
+  Breadcrumbs,
   Button,
   Card,
   EmptyState,
+  Main,
   PageHeader,
   Spinner,
   Steps,
@@ -36,7 +38,7 @@ export default function NewAppointmentPage(): React.JSX.Element {
   return (
     <RoleGate allow={['patient', 'libya_doctor']}>
       {/* useSearchParams needs a Suspense boundary for static generation. */}
-      <Suspense fallback={<main><Spinner label="…" /></main>}>
+      <Suspense fallback={<Main><Spinner label="…" /></Main>}>
         <BookingFlow />
       </Suspense>
     </RoleGate>
@@ -49,6 +51,7 @@ function BookingFlow(): React.JSX.Element {
   const t = useT();
   const router = useRouter();
   const formatDate = useDateFormat();
+  const { locale } = useLocale();
   const { user } = useSession();
   const searchParams = useSearchParams();
 
@@ -144,8 +147,22 @@ function BookingFlow(): React.JSX.Element {
 
   const stepLabels = [t.bookingStepDoctor, t.bookingStepSlot, t.bookingStepStudies, t.bookingStepConfirm];
 
+  // Presentation only: slots grouped by calendar day so the grid reads like a
+  // diary. The values sent to the API are the untouched ISO instants.
+  const intlLocale = locale === 'ar' ? 'ar-LY' : 'fr-TN';
+  const dayLabel = new Intl.DateTimeFormat(intlLocale, { dateStyle: 'full' });
+  const timeLabel = new Intl.DateTimeFormat(intlLocale, { timeStyle: 'short' });
+  const slotsByDay = (slots ?? []).reduce<Map<string, Slot[]>>((acc, s) => {
+    const key = dayLabel.format(new Date(s.startsAt));
+    acc.set(key, [...(acc.get(key) ?? []), s]);
+    return acc;
+  }, new Map());
+
   return (
-    <main className="stack">
+    <Main>
+      <Breadcrumbs
+        items={[{ label: t.appointmentsTitle, href: '/appointments' }, { label: t.bookingTitle }]}
+      />
       <PageHeader title={t.bookingTitle} />
       <Steps steps={stepLabels} current={step} />
 
@@ -165,22 +182,25 @@ function BookingFlow(): React.JSX.Element {
           ) : doctors.length === 0 ? (
             <EmptyState>{t.none}</EmptyState>
           ) : (
-            <ul className="list" data-testid="doctor-list">
+            <ul className="grid gap-3 sm:grid-cols-2" data-testid="doctor-list">
               {doctors.map((d) => (
-                <li key={d.id} className="list__item">
-                  <span style={{ flex: 1 }}>{d.displayName}</span>
-                  <span className="muted small">{d.specialty ?? ''}</span>
-                  <Button
-                    size="sm"
+                <li key={d.id}>
+                  <button
+                    type="button"
                     data-testid="choose-doctor"
+                    className="flex w-full flex-col gap-1 rounded-lg border bg-card p-4 text-start shadow-sm transition-colors hover:border-primary"
                     onClick={() => {
                       setDoctor(d);
                       setStep(1);
                       void loadSlots(d);
                     }}
                   >
-                    {t.next}
-                  </Button>
+                    <span className="font-semibold">{d.displayName}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {[d.specialty, d.city].filter((v) => v !== null && v !== '').join(' · ')}
+                    </span>
+                    <span className="mt-1 text-sm font-medium text-primary">{t.bookingChoose}</span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -191,7 +211,7 @@ function BookingFlow(): React.JSX.Element {
       {/* ---- step 2: slot ---- */}
       {step === 1 && doctor !== null && (
         <Card
-          title={t.bookingStepSlot}
+          title={`${t.bookingStepSlot} — ${doctor.displayName}`}
           actions={
             <Button size="sm" onClick={() => setStep(0)}>
               {t.back}
@@ -203,23 +223,29 @@ function BookingFlow(): React.JSX.Element {
           ) : slots.length === 0 ? (
             <EmptyState testId="no-slots">{t.bookingNoSlots}</EmptyState>
           ) : (
-            <ul className="list" data-testid="slot-list">
-              {slots.map((s) => (
-                <li key={s.startsAt} className="list__item">
-                  <span style={{ flex: 1 }}>{formatDate(s.startsAt)}</span>
-                  <Button
-                    size="sm"
-                    data-testid="choose-slot"
-                    onClick={() => {
-                      setSlot(s);
-                      setStep(2);
-                    }}
-                  >
-                    {t.next}
-                  </Button>
-                </li>
+            <div className="space-y-4" data-testid="slot-list">
+              {[...slotsByDay.entries()].map(([day, daySlots]) => (
+                <div key={day}>
+                  <h3 className="mb-2 text-sm font-semibold text-muted-foreground">{day}</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {daySlots.map((s) => (
+                      <button
+                        key={s.startsAt}
+                        type="button"
+                        data-testid="choose-slot"
+                        className="min-h-10 rounded-md border bg-card px-4 text-sm font-medium tabular-nums shadow-sm transition-colors hover:border-primary hover:text-primary"
+                        onClick={() => {
+                          setSlot(s);
+                          setStep(2);
+                        }}
+                      >
+                        {timeLabel.format(new Date(s.startsAt))}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </Card>
       )}
@@ -234,34 +260,33 @@ function BookingFlow(): React.JSX.Element {
             </Button>
           }
         >
-          <div className="stack-sm">
-            {studies.length === 0 ? (
-              <EmptyState>{t.none}</EmptyState>
-            ) : (
-              <ul className="list" data-testid="study-picker">
-                {studies.map((s) => (
-                  <li key={s.id} className="list__item">
-                    <label className="row" style={{ flex: 1 }}>
-                      <input
-                        type="checkbox"
-                        data-testid="study-checkbox"
-                        checked={selectedStudies.includes(s.id)}
-                        onChange={(e) =>
-                          setSelectedStudies((prev) =>
-                            e.target.checked ? [...prev, s.id] : prev.filter((id) => id !== s.id),
-                          )
-                        }
-                      />
-                      <span>{s.description ?? s.studyInstanceUid}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <Button variant="primary" data-testid="studies-next" onClick={() => setStep(3)}>
-              {t.next}
-            </Button>
-          </div>
+          {studies.length === 0 ? (
+            <EmptyState>{t.none}</EmptyState>
+          ) : (
+            <ul className="divide-y rounded-md border" data-testid="study-picker">
+              {studies.map((s) => (
+                <li key={s.id}>
+                  <label className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2 transition-colors hover:bg-muted/40">
+                    <input
+                      type="checkbox"
+                      data-testid="study-checkbox"
+                      className="size-4 accent-primary"
+                      checked={selectedStudies.includes(s.id)}
+                      onChange={(e) =>
+                        setSelectedStudies((prev) =>
+                          e.target.checked ? [...prev, s.id] : prev.filter((id) => id !== s.id),
+                        )
+                      }
+                    />
+                    <span className="text-sm">{s.description ?? s.studyInstanceUid}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Button variant="primary" data-testid="studies-next" onClick={() => setStep(3)}>
+            {t.next}
+          </Button>
         </Card>
       )}
 
@@ -275,28 +300,32 @@ function BookingFlow(): React.JSX.Element {
             </Button>
           }
         >
-          <div className="stack-sm">
-            <p>
-              <strong>{t.bookingDoctor}:</strong> {doctor.displayName}
-            </p>
-            <p>
-              <strong>{t.bookingSlot}:</strong> {formatDate(slot.startsAt)}
-            </p>
-            <p>
-              <strong>{t.patientStudies}:</strong> {selectedStudies.length}
-            </p>
-            <Alert tone="info">{t.checkoutDescription}</Alert>
-            <Button
-              variant="primary"
-              data-testid="confirm-booking"
-              disabled={busy || patientId === null}
-              onClick={() => void confirm()}
-            >
-              {t.bookingConfirm}
-            </Button>
-          </div>
+          <dl className="divide-y rounded-md border text-sm">
+            <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <dt className="text-muted-foreground">{t.bookingDoctor}</dt>
+              <dd className="font-medium">{doctor.displayName}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <dt className="text-muted-foreground">{t.bookingSlot}</dt>
+              <dd className="font-medium tabular-nums">{formatDate(slot.startsAt)}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <dt className="text-muted-foreground">{t.patientStudies}</dt>
+              <dd className="font-medium tabular-nums">{selectedStudies.length}</dd>
+            </div>
+          </dl>
+          <Alert tone="info">{t.checkoutDescription}</Alert>
+          <Button
+            variant="primary"
+            className="h-11 w-full sm:w-auto"
+            data-testid="confirm-booking"
+            disabled={busy || patientId === null}
+            onClick={() => void confirm()}
+          >
+            {t.bookingConfirm}
+          </Button>
         </Card>
       )}
-    </main>
+    </Main>
   );
 }

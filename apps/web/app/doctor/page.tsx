@@ -6,7 +6,20 @@ import { api, type Appointment } from '../../lib/api/endpoints';
 import { useDateFormat, useT } from '../../lib/i18n/provider';
 import { RoleGate } from '../../components/RoleGate';
 import { AppointmentStatusBadge } from '../../components/AppointmentStatusBadge';
-import { Alert, Button, EmptyState, PageHeader, Spinner } from '../../components/ui';
+import {
+  Alert,
+  Button,
+  EmptyState,
+  Main,
+  PageHeader,
+  Spinner,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '../../components/ui';
 
 /**
  * Receiving doctor's inbox — the Tunisian side of the referral.
@@ -71,7 +84,7 @@ function Inbox(): React.JSX.Element {
   };
 
   return (
-    <main className="page--wide stack">
+    <Main wide>
       <PageHeader title={t.inboxTitle} />
 
       {notice !== null && <Alert tone="success">{notice}</Alert>}
@@ -82,39 +95,63 @@ function Inbox(): React.JSX.Element {
       ) : appointments.length === 0 ? (
         <EmptyState testId="inbox-empty">{t.inboxEmpty}</EmptyState>
       ) : (
-        <ul className="list" data-testid="inbox-list">
-          {appointments.map((a) => (
-            <li key={a.id} className="list__item" data-testid="inbox-row" data-status={a.status}>
-              <div style={{ flex: 1 }}>
-                <Link href={`/appointments/${a.id}`}>{a.patientName ?? a.patientId}</Link>
-                <div className="muted small">{formatDate(a.startsAt)}</div>
-              </div>
-              <AppointmentStatusBadge status={a.status} />
-              {a.status === 'authorised' && (
-                <>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    data-testid="accept-referral"
-                    disabled={busyId === a.id}
-                    onClick={() => void act(a.id, 'accept')}
+        <Table data-testid="inbox-list">
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t.colPatient}</TableHead>
+              <TableHead>{t.colDate}</TableHead>
+              <TableHead>{t.appointmentStatus}</TableHead>
+              <TableHead>
+                <span className="sr-only">{t.colActions}</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {appointments.map((a) => (
+              <TableRow key={a.id} data-testid="inbox-row" data-status={a.status}>
+                <TableCell className="font-medium">
+                  <Link
+                    href={`/appointments/${a.id}`}
+                    className="rounded-sm hover:text-primary hover:underline"
                   >
-                    {t.inboxAccept}
-                  </Button>
-                  <Button
-                    size="sm"
-                    data-testid="decline-referral"
-                    disabled={busyId === a.id}
-                    onClick={() => void act(a.id, 'decline')}
-                  >
-                    {t.inboxDecline}
-                  </Button>
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
+                    {a.patientName ?? a.patientId}
+                  </Link>
+                </TableCell>
+                <TableCell className="text-muted-foreground">{formatDate(a.startsAt)}</TableCell>
+                <TableCell>
+                  <AppointmentStatusBadge status={a.status} />
+                </TableCell>
+                <TableCell>
+                  {a.status === 'authorised' && (
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {/* Accepting CAPTURES the payment (D2), so it is the one
+                          primary action; declining releases the hold and stays
+                          a plain button. The asymmetry is deliberate. */}
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        data-testid="accept-referral"
+                        disabled={busyId === a.id}
+                        onClick={() => void act(a.id, 'accept')}
+                      >
+                        {t.inboxAccept}
+                      </Button>
+                      <Button
+                        size="sm"
+                        data-testid="decline-referral"
+                        disabled={busyId === a.id}
+                        onClick={() => void act(a.id, 'decline')}
+                      >
+                        {t.inboxDecline}
+                      </Button>
+                    </div>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
-    </main>
+    </Main>
   );
 }

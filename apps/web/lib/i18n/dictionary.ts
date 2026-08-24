@@ -151,6 +151,88 @@ const ar = {
   auditAction: 'الإجراء',
   auditWhen: 'الوقت',
   auditOutcome: 'النتيجة',
+
+  // app shell
+  skipToContent: 'تخطي إلى المحتوى',
+  menuTitle: 'القائمة',
+  menuOpen: 'فتح القائمة',
+  menuClose: 'إغلاق القائمة',
+  roleLibyaDoctor: 'طبيب مُحيل (ليبيا)',
+  rolePatient: 'مريض',
+  roleTunisiaDoctor: 'طبيب مستقبِل (تونس)',
+  roleAdmin: 'مشرف',
+  footerDisclaimer: 'خدمة نقل وحجز — ليست أداة تشخيص.',
+  breadcrumbLabel: 'مسار التنقل',
+
+  // table columns
+  colPatient: 'المريض',
+  colDate: 'التاريخ',
+  colActions: 'إجراءات',
+  colDescription: 'الوصف',
+  colImages: 'عدد الصور',
+
+  // dashboard
+  dashboardOverview: 'نظرة عامة',
+  dashboardQuickActions: 'إجراءات سريعة',
+  dashboardRecent: 'أحدث المواعيد',
+  dashboardUpcoming: 'الموعد القادم',
+  dashboardNoUpcoming: 'لا يوجد موعد قادم بعد.',
+  dashboardAwaitingDecision: 'بانتظار قرارك',
+  dashboardViewAll: 'عرض الكل',
+  statPatients: 'المرضى المسجّلون',
+  statAppointmentsTotal: 'إجمالي المواعيد',
+
+  // audit extras
+  auditAllowed: 'مسموح',
+  auditDenied: 'مرفوض',
+  auditFilterAll: 'الكل',
+  auditFilterActionPlaceholder: 'تصفية حسب الإجراء…',
+  auditShowingRecent: 'يعرض أحدث الأحداث',
+
+  // upload
+  uploadTitle: 'رفع الصور الطبية',
+  uploadHint: 'اختر مجلد الدراسة من القرص. يمكن إغلاق المتصفح — سيستأنف الرفع تلقائيًا.',
+  uploadFolderLabel: 'مجلد الدراسة',
+  uploadDropHint: 'اختر مجلدًا يحتوي ملفات DICOM',
+  uploadResumeNotice: 'جارٍ استئناف ملفات من الجلسة السابقة',
+  uploadFiles: 'الملفات',
+  uploadStatusDone: 'تم',
+  uploadStatusVerifying: 'جارٍ التحقق',
+  uploadStatusRetrying: 'إعادة المحاولة',
+  uploadStatusReselect: 'أعد اختيار المجلد',
+  uploadStatusFailed: 'فشل',
+  uploadStatusWaiting: 'في الانتظار',
+
+  // booking extras
+  bookingChoose: 'اختيار',
+
+  // viewer
+  viewerTitle: 'عرض الدراسة',
+  viewerPrev: 'السابق',
+  viewerNext: 'التالي',
+  viewerFidelityFull: 'دقة كاملة',
+  viewerFidelityLoading: 'جارٍ تحميل الدقة الكاملة…',
+  viewerFidelityPreviewOnly: 'معاينة فقط',
+  viewerFidelityPreview: 'معاينة',
+  viewerWindowSoft: 'أنسجة رخوة',
+  viewerWindowLung: 'رئة',
+  viewerWindowBone: 'عظام',
+  viewerWindowReset: 'إعادة تعيين',
+  viewerLazyNote: 'تُحمَّل الصور عند الطلب فقط.',
+
+  // consent management
+  navConsents: 'الموافقات',
+  consentActiveTitle: 'الموافقات السارية',
+  consentNoneActive: 'لا توجد موافقات سارية.',
+  consentGrantTitle: 'منح موافقة جديدة',
+  consentSelectDoctor: 'اختر الطبيب المستقبِل',
+  consentGrantedOn: 'تاريخ المنح',
+
+  // viewer extras
+  viewerStudyInfo: 'بيانات الدراسة',
+  viewerModality: 'النوع',
+  viewerDownload: 'تنزيل DICOM الأصلية',
+  viewerDownloadFailed: 'تعذّر التنزيل. حاول مرة أخرى.',
 } as const;
 
 export type Dictionary = { readonly [K in keyof typeof ar]: string };
@@ -285,6 +367,80 @@ const fr: Dictionary = {
   auditAction: 'Action',
   auditWhen: 'Date',
   auditOutcome: 'Résultat',
+
+  skipToContent: 'Aller au contenu',
+  menuTitle: 'Menu',
+  menuOpen: 'Ouvrir le menu',
+  menuClose: 'Fermer le menu',
+  roleLibyaDoctor: 'Médecin référent (Libye)',
+  rolePatient: 'Patient',
+  roleTunisiaDoctor: 'Médecin destinataire (Tunisie)',
+  roleAdmin: 'Administrateur',
+  footerDisclaimer: 'Service de transfert et de réservation — pas un outil de diagnostic.',
+  breadcrumbLabel: 'Fil d’Ariane',
+
+  colPatient: 'Patient',
+  colDate: 'Date',
+  colActions: 'Actions',
+  colDescription: 'Description',
+  colImages: 'Images',
+
+  dashboardOverview: 'Vue d’ensemble',
+  dashboardQuickActions: 'Actions rapides',
+  dashboardRecent: 'Rendez-vous récents',
+  dashboardUpcoming: 'Prochain rendez-vous',
+  dashboardNoUpcoming: 'Aucun rendez-vous à venir.',
+  dashboardAwaitingDecision: 'En attente de votre décision',
+  dashboardViewAll: 'Tout afficher',
+  statPatients: 'Patients enregistrés',
+  statAppointmentsTotal: 'Total des rendez-vous',
+
+  auditAllowed: 'Autorisé',
+  auditDenied: 'Refusé',
+  auditFilterAll: 'Tous',
+  auditFilterActionPlaceholder: 'Filtrer par action…',
+  auditShowingRecent: 'Événements les plus récents affichés',
+
+  uploadTitle: 'Téléverser les images médicales',
+  uploadHint:
+    'Sélectionnez le dossier de l’examen. Vous pouvez fermer le navigateur — le téléversement reprendra automatiquement.',
+  uploadFolderLabel: 'Dossier de l’examen',
+  uploadDropHint: 'Choisissez un dossier contenant des fichiers DICOM',
+  uploadResumeNotice: 'Reprise de fichiers de la session précédente',
+  uploadFiles: 'Fichiers',
+  uploadStatusDone: 'Terminé',
+  uploadStatusVerifying: 'Vérification…',
+  uploadStatusRetrying: 'Nouvelle tentative',
+  uploadStatusReselect: 'Resélectionnez le dossier',
+  uploadStatusFailed: 'Échec',
+  uploadStatusWaiting: 'En attente',
+
+  bookingChoose: 'Choisir',
+
+  viewerTitle: 'Visualisation de l’examen',
+  viewerPrev: 'Précédent',
+  viewerNext: 'Suivant',
+  viewerFidelityFull: 'Pleine résolution',
+  viewerFidelityLoading: 'Chargement de la pleine résolution…',
+  viewerFidelityPreviewOnly: 'Aperçu uniquement',
+  viewerFidelityPreview: 'Aperçu',
+  viewerWindowSoft: 'Tissus mous',
+  viewerWindowLung: 'Poumon',
+  viewerWindowBone: 'Os',
+  viewerWindowReset: 'Réinitialiser',
+  viewerLazyNote: 'Les images ne sont chargées qu’à la demande.',
+
+  navConsents: 'Consentements',
+  consentActiveTitle: 'Consentements actifs',
+  consentNoneActive: 'Aucun consentement actif.',
+  consentGrantTitle: 'Accorder un nouveau consentement',
+  consentSelectDoctor: 'Choisissez le médecin destinataire',
+  consentGrantedOn: 'Accordé le',
+
+  viewerStudyInfo: 'Informations de l’examen',
+  viewerModality: 'Modalité',
+  viewerDownload: 'Télécharger le DICOM original',
+  viewerDownloadFailed: 'Échec du téléchargement. Réessayez.',
 };
 
 export const DICTIONARIES: Record<Locale, Dictionary> = { ar, fr };

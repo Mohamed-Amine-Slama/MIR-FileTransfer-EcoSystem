@@ -24,19 +24,7 @@ export function DiagnosticUseBanner() {
       data-testid="diagnostic-banner"
       role="note"
       aria-live="polite"
-      style={{
-        position: 'sticky',
-        insetBlockStart: 0,
-        zIndex: 10,
-        background: 'var(--color-warning-bg)',
-        color: 'var(--color-warning-fg)',
-        border: '1px solid currentColor',
-        borderRadius: '0.375rem',
-        padding: '0.6rem 0.9rem',
-        marginBlockEnd: '1rem',
-        fontWeight: 600,
-        fontSize: '0.9rem',
-      }}
+      className="sticky top-0 z-10 mb-4 rounded-md border border-current border-s-4 bg-warning-surface px-4 py-2.5 text-sm font-semibold text-warning"
     >
       {/* Arabic and French per DECISION D4. English is not a v1 locale, but the
           English sentence is the exact wording the spec mandates and is kept so
@@ -44,11 +32,7 @@ export function DiagnosticUseBanner() {
       <span lang="ar">للعرض المرجعي فقط — ليس للاستخدام التشخيصي</span>
       <span aria-hidden="true"> · </span>
       <span lang="fr">Visualisation de référence uniquement — pas pour usage diagnostique</span>
-      <span
-        data-testid="diagnostic-banner-en"
-        lang="en"
-        style={{ display: 'block', fontWeight: 400, opacity: 0.85 }}
-      >
+      <span data-testid="diagnostic-banner-en" lang="en" className="block font-normal opacity-85">
         Reference viewing only — not for diagnostic use
       </span>
     </div>

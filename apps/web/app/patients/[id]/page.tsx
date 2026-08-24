@@ -3,10 +3,27 @@
 import Link from 'next/link';
 import { use, useCallback, useEffect, useState } from 'react';
 import { ApiError } from '../../../lib/api/client';
-import { api, type Patient, type Study } from '../../../lib/api/endpoints';
+import { api, type Doctor, type Patient, type Study } from '../../../lib/api/endpoints';
 import { useDateFormat, useT } from '../../../lib/i18n/provider';
+import { useSession } from '../../../lib/session/session';
 import { RoleGate } from '../../../components/RoleGate';
-import { Alert, Button, Card, EmptyState, PageHeader, Spinner } from '../../../components/ui';
+import {
+  Alert,
+  Breadcrumbs,
+  Button,
+  Card,
+  EmptyState,
+  Main,
+  PageHeader,
+  Spinner,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  buttonVariants,
+} from '../../../components/ui';
 
 /**
  * Patient record — studies, and the actions a referring doctor takes.
@@ -32,9 +49,14 @@ export default function PatientPage({
 function PatientDetail({ patientId }: { patientId: string }): React.JSX.Element {
   const t = useT();
   const formatDate = useDateFormat();
+  const { role } = useSession();
 
   const [patient, setPatient] = useState<Patient | null>(null);
   const [studies, setStudies] = useState<Study[]>([]);
+  const [consents, setConsents] = useState<
+    { consentId: string; grantedTo: string; grantedAt: string }[] | null
+  >(null);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -62,6 +84,26 @@ function PatientDetail({ patientId }: { patientId: string }): React.JSX.Element 
     void load();
   }, [load]);
 
+  // The referring doctor may read the patient's active consents (they explain
+  // the terms and need to know whether the transfer is covered before booking).
+  // Fetched only for that role: the API would refuse a Tunisian doctor anyway,
+  // and a guaranteed denial row would be audit-log noise, not signal.
+  useEffect(() => {
+    if (role !== 'libya_doctor') return;
+    void (async () => {
+      try {
+        const [{ consents: rows }, { doctors: docs }] = await Promise.all([
+          api.consent.forPatient(patientId),
+          api.scheduling.doctors(),
+        ]);
+        setConsents(rows);
+        setDoctors(docs);
+      } catch {
+        setConsents([]); // The record page still works without this card's data.
+      }
+    })();
+  }, [role, patientId]);
+
   const issueClaim = async (): Promise<void> => {
     setBusy(true);
     setNotice(null);
@@ -79,40 +121,43 @@ function PatientDetail({ patientId }: { patientId: string }): React.JSX.Element 
 
   if (error !== null && patient === null) {
     return (
-      <main>
+      <Main>
         <Alert tone="danger" testId="patient-error">
           {error}
         </Alert>
-      </main>
+      </Main>
     );
   }
 
   if (patient === null) {
     return (
-      <main>
+      <Main>
         <Spinner label={t.loading} />
-      </main>
+      </Main>
     );
   }
 
   return (
-    <main className="page--wide stack" data-testid="patient-detail" data-patient-id={patient.id}>
+    <Main wide data-testid="patient-detail" data-patient-id={patient.id}>
+      <Breadcrumbs
+        items={[{ label: t.patientsTitle, href: '/patients' }, { label: patient.fullName }]}
+      />
       <PageHeader
         title={patient.fullName}
         description={`${patient.phoneE164} · ${patient.dateOfBirth}`}
         actions={
-          <div className="row">
+          <>
             <Button data-testid="issue-claim" disabled={busy} onClick={() => void issueClaim()}>
               {t.patientIssueClaim}
             </Button>
             <Link
               href={`/appointments/new?patientId=${patient.id}`}
-              className="btn btn--primary"
+              className={buttonVariants()}
               data-testid="book-for-patient"
             >
               {t.bookingTitle}
             </Link>
-          </div>
+          </>
         }
       />
 
@@ -127,22 +172,61 @@ function PatientDetail({ patientId }: { patientId: string }): React.JSX.Element 
         {studies.length === 0 ? (
           <EmptyState testId="studies-empty">{t.none}</EmptyState>
         ) : (
-          <ul className="list" data-testid="study-list">
-            {studies.map((s) => (
-              <li key={s.id} className="list__item" data-testid="study-row">
-                <span style={{ flex: 1 }}>{s.description ?? s.studyInstanceUid}</span>
-                <span className="muted small">
-                  {s.studyDate === null ? '—' : formatDate(s.studyDate)}
-                </span>
-                <span className="muted small">{s.instanceCount}</span>
-                <Link className="btn btn--sm" href={`/viewer/${s.studyInstanceUid}`}>
-                  {t.inboxViewStudies}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <Table data-testid="study-list">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t.colDescription}</TableHead>
+                <TableHead>{t.colDate}</TableHead>
+                <TableHead>{t.colImages}</TableHead>
+                <TableHead>
+                  <span className="sr-only">{t.colActions}</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {studies.map((s) => (
+                <TableRow key={s.id} data-testid="study-row">
+                  <TableCell className="font-medium">{s.description ?? s.studyInstanceUid}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {s.studyDate === null ? '—' : formatDate(s.studyDate)}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{s.instanceCount}</TableCell>
+                  <TableCell className="text-end">
+                    <Link
+                      className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                      href={`/viewer/${s.studyInstanceUid}`}
+                    >
+                      {t.inboxViewStudies}
+                    </Link>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </Card>
-    </main>
+
+      {role === 'libya_doctor' && consents !== null && (
+        <Card title={t.consentActiveTitle}>
+          {consents.length === 0 ? (
+            <EmptyState testId="patient-consents-empty">{t.consentNoneActive}</EmptyState>
+          ) : (
+            <ul className="divide-y rounded-md border" data-testid="patient-consents">
+              {consents.map((c) => (
+                <li key={c.consentId} className="flex flex-wrap items-center gap-3 px-3 py-2">
+                  <span className="flex-1 text-sm font-medium">
+                    {doctors.find((d) => d.id === c.grantedTo)?.displayName ?? c.grantedTo}
+                  </span>
+                  <span className="text-sm text-muted-foreground">{t.consentGrantedOn}</span>
+                  <span className="text-sm tabular-nums text-muted-foreground">
+                    {formatDate(c.grantedAt)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
+    </Main>
   );
 }

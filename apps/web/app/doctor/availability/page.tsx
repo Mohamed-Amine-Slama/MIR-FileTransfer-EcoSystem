@@ -4,7 +4,23 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../../lib/api/endpoints';
 import { useDateFormat, useT } from '../../../lib/i18n/provider';
 import { RoleGate } from '../../../components/RoleGate';
-import { Alert, Button, Card, EmptyState, Field, Input, PageHeader, Spinner } from '../../../components/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Main,
+  PageHeader,
+  Spinner,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '../../../components/ui';
 
 /**
  * Availability management — BUILD_SPEC P10.1.
@@ -83,19 +99,20 @@ function AvailabilityEditor(): React.JSX.Element {
   };
 
   return (
-    <main className="stack">
+    <Main>
       <PageHeader title={t.availabilityTitle} description={t.availabilityDescription} />
 
       {error !== null && <Alert tone="danger">{error}</Alert>}
 
       <Card>
         <form
-          className="stack-sm"
+          className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
             void add();
           }}
         >
+          <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t.availabilityFrom}>
             <Input
               data-testid="availability-from"
@@ -112,6 +129,7 @@ function AvailabilityEditor(): React.JSX.Element {
               onChange={(e) => setTo(e.target.value)}
             />
           </Field>
+          </div>
           <Field label={t.availabilitySlotMinutes}>
             <Input
               data-testid="availability-slot-minutes"
@@ -133,16 +151,25 @@ function AvailabilityEditor(): React.JSX.Element {
       ) : windows.length === 0 ? (
         <EmptyState testId="availability-empty">{t.availabilityEmpty}</EmptyState>
       ) : (
-        <ul className="list" data-testid="availability-list">
-          {windows.map((w) => (
-            <li key={w.id} className="list__item">
-              <span style={{ flex: 1 }}>{formatDate(w.startsAt)}</span>
-              <span className="muted small">{formatDate(w.endsAt)}</span>
-              <span className="muted small">{w.slotMinutes}′</span>
-            </li>
-          ))}
-        </ul>
+        <Table data-testid="availability-list">
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t.availabilityFrom}</TableHead>
+              <TableHead>{t.availabilityTo}</TableHead>
+              <TableHead>{t.availabilitySlotMinutes}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {windows.map((w) => (
+              <TableRow key={w.id}>
+                <TableCell className="font-medium">{formatDate(w.startsAt)}</TableCell>
+                <TableCell className="text-muted-foreground">{formatDate(w.endsAt)}</TableCell>
+                <TableCell className="text-muted-foreground">{w.slotMinutes}′</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
-    </main>
+    </Main>
   );
 }

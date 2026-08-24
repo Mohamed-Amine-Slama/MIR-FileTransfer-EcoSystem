@@ -6,7 +6,7 @@ import { api } from '../../lib/api/endpoints';
 import { useT } from '../../lib/i18n/provider';
 import { useSession } from '../../lib/session/session';
 import { RoleGate } from '../../components/RoleGate';
-import { Alert, Button, Card, Field, Input, PageHeader } from '../../components/ui';
+import { Alert, Button, Card, Field, Input, Main, PageHeader } from '../../components/ui';
 
 /**
  * Patient account claim — BUILD_SPEC P5.2.
@@ -53,7 +53,7 @@ function ClaimForm(): React.JSX.Element {
   };
 
   return (
-    <main className="stack">
+    <Main className="max-w-md">
       <PageHeader title={t.claimTitle} description={t.claimDescription} />
 
       {state === 'done' ? (
@@ -62,31 +62,33 @@ function ClaimForm(): React.JSX.Element {
         </Alert>
       ) : (
         <Card>
-          <div className="stack-sm">
-            <Field label={t.claimCode} error={error}>
-              <Input
-                data-testid="claim-code"
-                value={code}
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                invalid={error !== null}
-                // Strip non-digits as typed: an SMS pasted with spaces or a
-                // trailing full stop should not be a validation error.
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              />
-            </Field>
-            <Button
-              variant="primary"
-              data-testid="claim-submit"
-              disabled={!valid || state === 'busy'}
-              onClick={() => void submit()}
-            >
-              {t.claimSubmit}
-            </Button>
-          </div>
+          <Field label={t.claimCode} error={error}>
+            <Input
+              data-testid="claim-code"
+              value={code}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              invalid={error !== null}
+              // A large centered box: the code is the entire screen, and the
+              // patient is most likely typing it on a phone.
+              className="h-14 text-center text-2xl font-semibold tracking-[0.4em]"
+              // Strip non-digits as typed: an SMS pasted with spaces or a
+              // trailing full stop should not be a validation error.
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            />
+          </Field>
+          <Button
+            variant="primary"
+            className="h-11 w-full"
+            data-testid="claim-submit"
+            disabled={!valid || state === 'busy'}
+            onClick={() => void submit()}
+          >
+            {t.claimSubmit}
+          </Button>
         </Card>
       )}
-    </main>
+    </Main>
   );
 }

@@ -2,9 +2,10 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { KeyRound } from 'lucide-react';
 import { useT } from '../../lib/i18n/provider';
 import { useSession } from '../../lib/session/session';
-import { Alert, Button, Card, Field, Input, PageHeader } from '../../components/ui';
+import { Alert, Button, Card, Field, Input, Main, PageHeader } from '../../components/ui';
 
 /**
  * Sign-in — BUILD_SPEC P4.
@@ -43,41 +44,44 @@ export default function LoginPage(): React.JSX.Element {
   };
 
   return (
-    <main className="stack">
+    <Main className="max-w-md">
       <PageHeader title={t.signInTitle} description={t.signInDescription} />
 
       <Card>
         {/* The real path. Points at the API's OIDC entry point so the
             redirect_uri and PKCE parameters are built server-side, where the
             client secret and the allowed-callback list live. */}
-        <a className="btn btn--primary" href="/api/auth/login" data-testid="oidc-login">
+        <a
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+          href="/api/auth/login"
+          data-testid="oidc-login"
+        >
+          <KeyRound className="size-4" aria-hidden="true" />
           {t.signInContinue}
         </a>
       </Card>
 
       <Card title={t.signInDevTitle}>
-        <div className="stack-sm">
-          <Alert tone="warning">{t.signInDevHint}</Alert>
-          <Field label={t.signInToken}>
-            <Input
-              data-testid="dev-token"
-              value={token}
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(e) => setToken(e.target.value)}
-            />
-          </Field>
-          {error !== null && <Alert tone="danger">{error}</Alert>}
-          <Button
-            variant="primary"
-            data-testid="dev-sign-in"
-            disabled={busy || token.trim() === ''}
-            onClick={() => void onDevSignIn()}
-          >
-            {t.navSignIn}
-          </Button>
-        </div>
+        <Alert tone="warning">{t.signInDevHint}</Alert>
+        <Field label={t.signInToken}>
+          <Input
+            data-testid="dev-token"
+            value={token}
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(e) => setToken(e.target.value)}
+          />
+        </Field>
+        {error !== null && <Alert tone="danger">{error}</Alert>}
+        <Button
+          variant="primary"
+          data-testid="dev-sign-in"
+          disabled={busy || token.trim() === ''}
+          onClick={() => void onDevSignIn()}
+        >
+          {t.navSignIn}
+        </Button>
       </Card>
-    </main>
+    </Main>
   );
 }

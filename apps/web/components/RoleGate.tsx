@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import type { Role } from '@mir/contracts';
 import { useT } from '../lib/i18n/provider';
 import { useSession } from '../lib/session/session';
-import { Alert, Spinner } from './ui';
+import { Alert, Main, Spinner, buttonVariants } from './ui';
 
 /**
  * Renders children only for the listed roles.
@@ -29,32 +29,32 @@ export function RoleGate({
 
   if (status === 'loading') {
     return (
-      <main>
+      <Main>
         <Spinner label={t.loading} />
-      </main>
+      </Main>
     );
   }
 
   if (status === 'anonymous') {
     return (
-      <main className="stack">
+      <Main>
         <Alert tone="warning" testId="sign-in-required">
           {t.signInRequired}
         </Alert>
-        <Link href="/login" className="btn btn--primary">
+        <Link href="/login" className={buttonVariants()}>
           {t.navSignIn}
         </Link>
-      </main>
+      </Main>
     );
   }
 
   if (role === null || !allow.includes(role)) {
     return (
-      <main>
+      <Main>
         <Alert tone="danger" testId="not-authorised">
           {t.notAuthorised}
         </Alert>
-      </main>
+      </Main>
     );
   }
 

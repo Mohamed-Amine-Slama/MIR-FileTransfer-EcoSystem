@@ -85,9 +85,15 @@ export function useDateFormat(): (value: Date | string) => string {
     (value: Date | string) => {
       const date = typeof value === 'string' ? new Date(value) : value;
       if (Number.isNaN(date.getTime())) return '—';
+      // Explicit components rather than dateStyle/timeStyle: the spec forbids
+      // mixing the styles with timeZoneName, and compliant engines throw. The
+      // zone stays visible — that requirement (P10.1) is the whole point.
       return new Intl.DateTimeFormat(locale === 'ar' ? 'ar-LY' : 'fr-TN', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
         timeZoneName: 'short',
       }).format(date);
     },
