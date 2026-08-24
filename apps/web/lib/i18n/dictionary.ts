@@ -50,9 +50,9 @@ const ar = {
   signInTitle: 'تسجيل الدخول',
   signInDescription: 'الدخول عبر مزوّد الهوية. الأطباء والإداريون يحتاجون إلى التحقق بخطوتين.',
   signInContinue: 'المتابعة إلى مزوّد الهوية',
-  signInDevTitle: 'دخول التطوير',
-  signInDevHint: 'ألصق رمز الوصول (JWT) للاختبار المحلي فقط.',
-  signInToken: 'رمز الوصول',
+  signInEmail: 'البريد الإلكتروني',
+  signInPassword: 'كلمة المرور',
+  signInInvalid: 'البريد الإلكتروني أو كلمة المرور غير صحيحة.',
 
   // claim
   claimTitle: 'ربط حسابك بسجلك الطبي',
@@ -274,9 +274,9 @@ const fr: Dictionary = {
   signInDescription:
     "Connexion via le fournisseur d'identité. Les médecins et administrateurs doivent utiliser la double authentification.",
   signInContinue: "Continuer vers le fournisseur d'identité",
-  signInDevTitle: 'Connexion de développement',
-  signInDevHint: "Collez un jeton d'accès (JWT) — usage local uniquement.",
-  signInToken: "Jeton d'accès",
+  signInEmail: 'E-mail',
+  signInPassword: 'Mot de passe',
+  signInInvalid: 'E-mail ou mot de passe incorrect.',
 
   claimTitle: 'Associer votre compte à votre dossier',
   claimDescription: 'Saisissez le code à six chiffres reçu par SMS.',

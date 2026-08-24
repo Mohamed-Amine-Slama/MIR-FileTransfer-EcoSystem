@@ -111,6 +111,11 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       KC_HEALTH_ENABLED: 'true'
+      # Pin the issuer to the browser-visible address. Without this, a token
+      # requested over the compose network (web -> keycloak:8080, for the
+      # email+password form) would carry iss=http://keycloak:8080/… and the
+      # API would reject it — its KEYCLOAK_ISSUER_URL below says localhost.
+      KC_HOSTNAME: http://localhost:${KEYCLOAK_HOST_PORT:-8080}
     volumes:
       - ./infra/keycloak/realm-mir.json:/opt/keycloak/data/import/realm-mir.json:ro
     ports:
@@ -254,6 +259,13 @@ services:
         # standalone output — see the rewrites() block in next.config.mjs.
         API_ORIGIN: http://api:3000
     container_name: mir-web
+    environment:
+      # Read at RUNTIME by app/auth/password-login/route.ts (unlike API_ORIGIN,
+      # nothing here is baked at build). ISSUER is what the minted token's iss
+      # must be; TOKEN_URL is where this container can actually reach Keycloak.
+      # The two differ for the same split-horizon reason as the API's pair.
+      KEYCLOAK_ISSUER_URL: http://localhost:${KEYCLOAK_HOST_PORT:-8080}/realms/mir
+      KEYCLOAK_TOKEN_URL: http://keycloak:8080/realms/mir/protocol/openid-connect/token
     ports:
       - '${WEB_HOST_PORT:-3001}:3001'
     depends_on:

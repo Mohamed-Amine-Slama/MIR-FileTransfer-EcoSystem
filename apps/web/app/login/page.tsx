@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { KeyRound } from 'lucide-react';
+import { KeyRound, LogIn } from 'lucide-react';
 import { useT } from '../../lib/i18n/provider';
 import { useSession } from '../../lib/session/session';
 import { Alert, Button, Card, Field, Input, Main, PageHeader } from '../../components/ui';
@@ -10,31 +10,50 @@ import { Alert, Button, Card, Field, Input, Main, PageHeader } from '../../compo
 /**
  * Sign-in — BUILD_SPEC P4.
  *
- * Authentication belongs to Keycloak (P4.1), not to this app: the redirect
- * below hands off and comes back with a token. That is what keeps password
- * handling, TOTP enrolment and lockout policy in one audited place instead of
- * reimplemented here.
+ * Authentication belongs to Keycloak (P4.1), not to this app, and both paths
+ * below honour that:
  *
- * The token box underneath is a DEVELOPMENT affordance. It is visible only
- * when the identity provider has not been configured, so it cannot become a
- * production login path by accident — and it is why P4.3's rule still holds:
- * clinical roles must have TOTP enrolled, and that is enforced by the token
- * issuer and re-checked by the API guard, never by this form.
+ *  - The form posts email + password to /auth/password-login, which relays a
+ *    single token request to Keycloak and returns the access token. The app
+ *    never stores or checks a password; policy, lockout and brute-force
+ *    protection stay in Keycloak. See app/auth/password-login/route.ts.
+ *  - The identity-provider link is the OIDC redirect — the production path,
+ *    where credentials are typed on Keycloak's own pages.
+ *
+ * "Wrong email" and "wrong password" render the same sentence on purpose:
+ * anything more specific is an account-enumeration oracle.
  */
 export default function LoginPage(): React.JSX.Element {
   const t = useT();
   const router = useRouter();
   const { signInWithToken } = useSession();
 
-  const [token, setToken] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const onDevSignIn = async (): Promise<void> => {
+  const canSubmit = email.trim() !== '' && password !== '' && !busy;
+
+  const signIn = async (): Promise<void> => {
     setBusy(true);
     setError(null);
     try {
-      await signInWithToken(token.trim());
+      const res = await fetch('/auth/password-login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      if (res.status === 401) {
+        setError(t.signInInvalid);
+        return;
+      }
+      if (!res.ok) {
+        setError(t.genericError);
+        return;
+      }
+      const { accessToken } = (await res.json()) as { accessToken: string };
+      await signInWithToken(accessToken);
       router.push('/');
     } catch {
       setError(t.genericError);
@@ -48,40 +67,62 @@ export default function LoginPage(): React.JSX.Element {
       <PageHeader title={t.signInTitle} description={t.signInDescription} />
 
       <Card>
-        {/* The real path. Points at the API's OIDC entry point so the
-            redirect_uri and PKCE parameters are built server-side, where the
-            client secret and the allowed-callback list live. */}
-        <a
-          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-          href="/api/auth/login"
-          data-testid="oidc-login"
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void signIn();
+          }}
         >
-          <KeyRound className="size-4" aria-hidden="true" />
-          {t.signInContinue}
-        </a>
+          <Field label={t.signInEmail}>
+            <Input
+              data-testid="login-email"
+              type="email"
+              value={email}
+              autoComplete="username"
+              inputMode="email"
+              spellCheck={false}
+              dir="ltr"
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </Field>
+
+          <Field label={t.signInPassword}>
+            <Input
+              data-testid="login-password"
+              type="password"
+              value={password}
+              autoComplete="current-password"
+              dir="ltr"
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </Field>
+
+          {error !== null && <Alert tone="danger">{error}</Alert>}
+
+          <Button
+            type="submit"
+            variant="primary"
+            className="h-11 w-full"
+            data-testid="login-submit"
+            disabled={!canSubmit}
+          >
+            <LogIn aria-hidden="true" />
+            {t.navSignIn}
+          </Button>
+        </form>
       </Card>
 
-      <Card title={t.signInDevTitle}>
-        <Alert tone="warning">{t.signInDevHint}</Alert>
-        <Field label={t.signInToken}>
-          <Input
-            data-testid="dev-token"
-            value={token}
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(e) => setToken(e.target.value)}
-          />
-        </Field>
-        {error !== null && <Alert tone="danger">{error}</Alert>}
-        <Button
-          variant="primary"
-          data-testid="dev-sign-in"
-          disabled={busy || token.trim() === ''}
-          onClick={() => void onDevSignIn()}
-        >
-          {t.navSignIn}
-        </Button>
-      </Card>
+      {/* The OIDC redirect — the production path (P4.1): credentials typed on
+          the identity provider's own pages, second factor included. */}
+      <a
+        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-input bg-card px-4 text-sm font-medium shadow-sm transition-colors hover:border-primary hover:text-primary"
+        href="/api/auth/login"
+        data-testid="oidc-login"
+      >
+        <KeyRound className="size-4" aria-hidden="true" />
+        {t.signInContinue}
+      </a>
     </Main>
   );
 }
