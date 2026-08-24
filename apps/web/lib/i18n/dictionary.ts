@@ -48,7 +48,7 @@ const ar = {
 
   // sign in
   signInTitle: 'تسجيل الدخول',
-  signInDescription: 'الدخول عبر مزوّد الهوية. الأطباء والإداريون يحتاجون إلى التحقق بخطوتين.',
+  signInDescription: 'سجّل الدخول للمتابعة. الأطباء والإداريون يحتاجون إلى التحقق بخطوتين.',
   signInContinue: 'المتابعة إلى مزوّد الهوية',
   signInEmail: 'البريد الإلكتروني',
   signInPassword: 'كلمة المرور',
@@ -272,7 +272,7 @@ const fr: Dictionary = {
 
   signInTitle: 'Connexion',
   signInDescription:
-    "Connexion via le fournisseur d'identité. Les médecins et administrateurs doivent utiliser la double authentification.",
+    'Connectez-vous pour continuer. Les médecins et administrateurs doivent utiliser la double authentification.',
   signInContinue: "Continuer vers le fournisseur d'identité",
   signInEmail: 'E-mail',
   signInPassword: 'Mot de passe',
