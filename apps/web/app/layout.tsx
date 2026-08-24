@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { IBM_Plex_Sans_Arabic } from 'next/font/google';
+import localFont from 'next/font/local';
 import { LOCALE_DIRECTION, type Locale } from '@mir/contracts';
 import { AppShell } from '../components/AppShell';
 import { LocaleProvider } from '../lib/i18n/provider';
@@ -13,12 +13,23 @@ export const metadata = {
 
 // One family for both scripts (D4): IBM Plex Sans Arabic ships full Arabic
 // coverage plus Latin, so Arabic and French render with the same voice.
-// Self-hosted by next/font at build time — no runtime font requests — and
+//
+// VENDORED, not fetched from Google Fonts. next/font/google downloads at
+// build time, and when that fetch fails — as it does inside a Docker build
+// on a flaky or restricted network — Next silently falls back to system
+// fonts and still exits 0, so the deployment image ships without its
+// typeface and nothing fails. The files live in app/fonts/ (OFL 1.1,
+// LICENSE.txt beside them), which makes the image build hermetic.
+//
 // `display: swap` keeps first paint on the system stack, which is what keeps
 // the viewer's 5-second budget (P9.1) out of the font's hands.
-const plex = IBM_Plex_Sans_Arabic({
-  subsets: ['arabic', 'latin'],
-  weight: ['400', '500', '600', '700'],
+const plex = localFont({
+  src: [
+    { path: './fonts/IBMPlexSansArabic-Regular.woff2', weight: '400', style: 'normal' },
+    { path: './fonts/IBMPlexSansArabic-Medium.woff2', weight: '500', style: 'normal' },
+    { path: './fonts/IBMPlexSansArabic-SemiBold.woff2', weight: '600', style: 'normal' },
+    { path: './fonts/IBMPlexSansArabic-Bold.woff2', weight: '700', style: 'normal' },
+  ],
   display: 'swap',
   variable: '--font-plex',
 });
