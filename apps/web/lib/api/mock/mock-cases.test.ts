@@ -84,3 +84,101 @@ describe('mock cases api', () => {
     expect(all.length).toBeGreaterThanOrEqual(mine.length);
   });
 });
+
+describe('mock cases api mutations', () => {
+  it('assigns a fresh reference on submission and opens the timeline (§5.2)', async () => {
+    const created = await mockCasesApi.submitCase({
+      providerId: 'prov-source-1',
+      corridorId: 'ly-tn',
+      patientId: 'pat-new',
+      intake: { referralReason: 'New referral', urgency: 'routine' },
+    });
+    expect(created.ref).toMatch(/^MIR-\d{4}-\d{4}$/);
+    expect(created.status).toBe('submitted');
+
+    const events = await mockCasesApi.listCaseEvents(created.ref);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.from).toBeNull();
+    expect(events[0]?.to).toBe('submitted');
+  });
+
+  it('never reuses a reference', async () => {
+    const a = await mockCasesApi.submitCase({
+      providerId: 'prov-source-1',
+      corridorId: 'ly-tn',
+      patientId: 'pat-a',
+      intake: {},
+    });
+    const b = await mockCasesApi.submitCase({
+      providerId: 'prov-source-1',
+      corridorId: 'ly-tn',
+      patientId: 'pat-b',
+      intake: {},
+    });
+    expect(a.ref).not.toBe(b.ref);
+  });
+
+  it('refuses an illegal ops status override rather than coercing it (§5.8)', async () => {
+    await expect(
+      mockCasesApi.changeCaseStatus('MIR-2026-0418', 'completed', 'Ops'),
+    ).rejects.toThrow(/illegal transition/);
+  });
+
+  it('records who moved a case and when, for the §5.3 timeline', async () => {
+    const before = await mockCasesApi.listCaseEvents('MIR-2026-0418');
+    await mockCasesApi.changeCaseStatus('MIR-2026-0418', 'under_review', 'Ops staff');
+    const after = await mockCasesApi.listCaseEvents('MIR-2026-0418');
+    expect(after.length).toBe(before.length + 1);
+    expect(after.at(-1)?.actorDisplayName).toBe('Ops staff');
+  });
+
+  it('appends a message to the case it was sent on (§5.6)', async () => {
+    const created = await mockCasesApi.sendMessage('MIR-2026-0417', 'Following up.', 'Dr. Amal');
+    expect(created.caseRef).toBe('MIR-2026-0417');
+    const all = await mockCasesApi.listMessages('MIR-2026-0417');
+    expect(all.at(-1)?.body).toBe('Following up.');
+  });
+
+  it('marks a notification read without disturbing the others (§5.6)', async () => {
+    const before = await mockCasesApi.listNotifications();
+    const unread = before.find((n) => n.readAt === undefined);
+    expect(unread).toBeDefined();
+    if (unread === undefined) return;
+    await mockCasesApi.markNotificationRead(unread.id);
+    const after = await mockCasesApi.listNotifications();
+    expect(after.find((n) => n.id === unread.id)?.readAt).toBeDefined();
+    expect(after).toHaveLength(before.length);
+  });
+
+  it('registers a provider as pending, never pre-approved (§5.1)', async () => {
+    const created = await mockCasesApi.registerProvider({
+      kind: 'clinic',
+      legalName: 'New Clinic',
+      corridorId: 'ly-tn',
+      side: 'source',
+      credentials: { licenceNumber: 'X-1' },
+      seatCount: 1,
+    });
+    expect(created.verification.status).toBe('pending');
+    expect(created.verification.decidedAt).toBeUndefined();
+  });
+
+  it('records a decision instant when ops approves or rejects (§5.1)', async () => {
+    const created = await mockCasesApi.registerProvider({
+      kind: 'doctor',
+      legalName: 'Solo Practice',
+      corridorId: 'ly-tn',
+      side: 'destination',
+      credentials: {},
+      seatCount: 1,
+    });
+    const rejected = await mockCasesApi.decideVerification(
+      created.id,
+      false,
+      'verificationReasonLicenceExpired',
+    );
+    expect(rejected.verification.status).toBe('rejected');
+    expect(rejected.verification.decidedAt).toBeDefined();
+    expect(rejected.verification.reasonKey).toBe('verificationReasonLicenceExpired');
+  });
+});
