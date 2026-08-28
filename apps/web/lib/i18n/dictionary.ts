@@ -243,6 +243,11 @@ const ar = {
   fieldPreferredDate: 'التاريخ المفضّل',
   licensingBodyLyMedicalSyndicate: 'نقابة الأطباء الليبية',
   licensingBodyTnOrdreDesMedecins: 'العمادة الوطنية للأطباء بتونس',
+
+  // notifications (§5.6)
+  notifMessageReceived: 'رسالة جديدة',
+  notifCaseStatusChanged: 'تغيّرت حالة الحالة',
+  notifFileAdded: 'تمت إضافة ملف',
 } as const;
 
 export type Dictionary = { readonly [K in keyof typeof ar]: string };
@@ -461,6 +466,11 @@ const fr: Dictionary = {
   fieldPreferredDate: 'Date souhaitée',
   licensingBodyLyMedicalSyndicate: 'Syndicat des médecins de Libye',
   licensingBodyTnOrdreDesMedecins: 'Conseil national de l’Ordre des médecins de Tunisie',
+
+  // notifications (§5.6)
+  notifMessageReceived: 'Nouveau message',
+  notifCaseStatusChanged: 'Statut du dossier modifié',
+  notifFileAdded: 'Fichier ajouté',
 };
 
 /**
@@ -700,6 +710,11 @@ const en: Dictionary = {
   fieldPreferredDate: 'Preferred date',
   licensingBodyLyMedicalSyndicate: 'Libyan Medical Syndicate',
   licensingBodyTnOrdreDesMedecins: 'Tunisian National Council of Physicians',
+
+  // notifications (§5.6)
+  notifMessageReceived: 'New message',
+  notifCaseStatusChanged: 'Case status changed',
+  notifFileAdded: 'File added',
 };
 
 export const DICTIONARIES: Record<UiLocale, Dictionary> = { ar, fr, en };
