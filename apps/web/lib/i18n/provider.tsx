@@ -1,7 +1,13 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { LOCALE_DIRECTION, localeSchema, type Locale } from '@mir/contracts';
+import {
+  isContentLocale,
+  UI_LOCALE_DIRECTION,
+  uiLocaleSchema,
+  type Locale,
+  type UiLocale,
+} from '@mir/contracts';
 import { DICTIONARIES, type Dictionary } from './dictionary';
 
 /**
@@ -20,41 +26,41 @@ import { DICTIONARIES, type Dictionary } from './dictionary';
  */
 
 const STORAGE_KEY = 'mir.locale';
-const DEFAULT_LOCALE: Locale = 'ar';
+const DEFAULT_LOCALE: UiLocale = 'ar';
 
 interface LocaleContextValue {
-  locale: Locale;
+  locale: UiLocale;
   dir: 'rtl' | 'ltr';
-  setLocale: (next: Locale) => void;
+  setLocale: (next: UiLocale) => void;
   t: Dictionary;
 }
 
 const LocaleContext = createContext<LocaleContextValue | null>(null);
 
 export function LocaleProvider({ children }: { children: ReactNode }): React.JSX.Element {
-  const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
+  const [locale, setLocaleState] = useState<UiLocale>(DEFAULT_LOCALE);
 
   // Restore the stored preference after mount. Server and first client render
   // therefore agree on DEFAULT_LOCALE, which is what avoids a hydration
   // mismatch on a value the server cannot know.
   useEffect(() => {
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    const parsed = localeSchema.safeParse(stored);
+    const parsed = uiLocaleSchema.safeParse(stored);
     if (parsed.success) setLocaleState(parsed.data);
   }, []);
 
   useEffect(() => {
     document.documentElement.lang = locale;
-    document.documentElement.dir = LOCALE_DIRECTION[locale];
+    document.documentElement.dir = UI_LOCALE_DIRECTION[locale];
   }, [locale]);
 
-  const setLocale = useCallback((next: Locale) => {
+  const setLocale = useCallback((next: UiLocale) => {
     setLocaleState(next);
     window.localStorage.setItem(STORAGE_KEY, next);
   }, []);
 
   const value = useMemo<LocaleContextValue>(
-    () => ({ locale, dir: LOCALE_DIRECTION[locale], setLocale, t: DICTIONARIES[locale] }),
+    () => ({ locale, dir: UI_LOCALE_DIRECTION[locale], setLocale, t: DICTIONARIES[locale] }),
     [locale, setLocale],
   );
 
@@ -79,6 +85,8 @@ export function useT(): Dictionary {
  * zones here — the scanner's, Tripoli, and Tunis — so the zone is always shown
  * rather than left for the reader to assume.
  */
+const DATE_LOCALE: Record<UiLocale, string> = { ar: 'ar-LY', fr: 'fr-TN', en: 'en-GB' };
+
 export function useDateFormat(): (value: Date | string) => string {
   const { locale } = useLocale();
   return useCallback(
@@ -88,7 +96,7 @@ export function useDateFormat(): (value: Date | string) => string {
       // Explicit components rather than dateStyle/timeStyle: the spec forbids
       // mixing the styles with timeZoneName, and compliant engines throw. The
       // zone stays visible — that requirement (P10.1) is the whole point.
-      return new Intl.DateTimeFormat(locale === 'ar' ? 'ar-LY' : 'fr-TN', {
+      return new Intl.DateTimeFormat(DATE_LOCALE[locale], {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
@@ -99,4 +107,17 @@ export function useDateFormat(): (value: Date | string) => string {
     },
     [locale],
   );
+}
+
+/**
+ * The locale that is safe to PERSIST.
+ *
+ * English is presentation-only: the user row and the consent terms table both
+ * declare CHECK (locale IN ('ar','fr')), so a request carrying 'en' would be
+ * rejected by Postgres. Admin screens therefore run in English while still
+ * writing Arabic — the platform default — to content rows.
+ */
+export function useContentLocale(): Locale {
+  const { locale } = useLocale();
+  return isContentLocale(locale) ? locale : 'ar';
 }

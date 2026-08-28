@@ -1,4 +1,4 @@
-import type { Locale } from '@mir/contracts';
+import type { UiLocale } from '@mir/contracts';
 
 /**
  * UI strings — DECISION D4 (Arabic and French from day one).
@@ -443,9 +443,239 @@ const fr: Dictionary = {
   viewerDownloadFailed: 'Échec du téléchargement. Réessayez.',
 };
 
-export const DICTIONARIES: Record<Locale, Dictionary> = { ar, fr };
+/**
+ * English — brief §4.2 (admin and internal use).
+ *
+ * English is never written to a content row: the user and consent tables both
+ * declare CHECK (locale IN ('ar','fr')). See `isContentLocale` in
+ * @mir/contracts, and `useContentLocale` in ./provider.
+ */
+const en: Dictionary = {
+  appName: 'MIR',
+  appTagline: 'Cross-border medical imaging transfer',
 
-export const LOCALE_NAMES: Record<Locale, string> = {
+  // navigation
+  navHome: 'Home',
+  navPatients: 'Patients',
+  navUpload: 'Upload imaging',
+  navAppointments: 'Appointments',
+  navInbox: 'Incoming referrals',
+  navAvailability: 'Availability',
+  navAudit: 'Audit log',
+  navSignIn: 'Sign in',
+  navSignOut: 'Sign out',
+  navLanguage: 'Language',
+
+  // generic
+  loading: 'Loading…',
+  save: 'Save',
+  cancel: 'Cancel',
+  back: 'Back',
+  next: 'Next',
+  confirm: 'Confirm',
+  search: 'Search',
+  retry: 'Try again',
+  none: 'None',
+  required: 'This field is required',
+  genericError: 'The operation could not be completed. Try again.',
+  notAuthorised: 'You do not have permission to view this page.',
+  signInRequired: 'You must sign in first.',
+
+  // sign in
+  signInTitle: 'Sign in',
+  signInDescription:
+    'Sign in to continue. Doctors and administrators must complete two-factor verification.',
+  signInContinue: 'Continue to the identity provider',
+  signInEmail: 'Email address',
+  signInPassword: 'Password',
+  signInInvalid: 'That email address or password is incorrect.',
+
+  // claim
+  claimTitle: 'Link your account to your medical record',
+  claimDescription: 'Enter the six-digit code sent to you by text message.',
+  claimCode: 'Verification code',
+  claimSubmit: 'Link account',
+  claimSuccess: 'Your account has been linked.',
+  claimInvalid: 'That code is incorrect or has expired.',
+
+  // patients
+  patientsTitle: 'Patients',
+  patientsDescription: 'Search by phone number only — searching by name is not available.',
+  patientsSearchPhone: 'Phone number',
+  patientsNew: 'New patient',
+  patientsEmpty: 'No patients yet.',
+  patientsNoMatch: 'No results for that number.',
+  patientName: 'Full name',
+  patientDob: 'Date of birth',
+  patientSex: 'Sex',
+  patientSexM: 'Male',
+  patientSexF: 'Female',
+  patientSexO: 'Other',
+  patientNationalId: 'National ID (optional)',
+  patientCreate: 'Create patient',
+  patientDuplicateTitle: 'A patient already exists with this phone number',
+  patientDuplicateBody:
+    'Review the list below. If this is a different person, confirm explicitly — records are never merged automatically.',
+  patientDuplicateConfirm: 'This is a different person, continue',
+  patientIssueClaim: 'Send linking code',
+  patientClaimSent: 'The code has been sent by text message.',
+  patientStudies: 'Studies',
+  patientAppointments: 'Appointments',
+
+  // consent
+  consentTitle: 'Consent to cross-border transfer',
+  consentDescription:
+    'Your medical images will be transferred to a doctor abroad. Read the text, then agree to continue.',
+  consentAgree: 'I agree',
+  consentRevoke: 'Withdraw consent',
+  consentGranted: 'Your consent has been recorded.',
+  consentRevoked: 'Consent has been withdrawn.',
+  consentRequired: 'You cannot continue without consent.',
+
+  // scheduling
+  bookingTitle: 'Book an appointment',
+  bookingStepDoctor: 'Choose a doctor',
+  bookingStepSlot: 'Choose a time',
+  bookingStepStudies: 'Choose studies',
+  bookingStepConfirm: 'Confirm',
+  bookingDoctor: 'Doctor',
+  bookingSlot: 'Time',
+  bookingNoSlots: 'No times are available in this period.',
+  bookingConfirm: 'Confirm booking',
+  bookingSlotTaken: 'That time is no longer available. Choose another.',
+  appointmentsTitle: 'Appointments',
+  appointmentsEmpty: 'No appointments.',
+  appointmentStatus: 'Status',
+  statusPendingPayment: 'Awaiting payment',
+  statusAuthorised: 'Payment held',
+  statusConfirmed: 'Confirmed',
+  statusCancelled: 'Cancelled',
+  statusExpired: 'Expired',
+
+  // availability
+  availabilityTitle: 'Availability',
+  availabilityDescription: 'Set the periods during which patients may book.',
+  availabilityFrom: 'From',
+  availabilityTo: 'To',
+  availabilitySlotMinutes: 'Appointment length (minutes)',
+  availabilityAdd: 'Add period',
+  availabilityEmpty: 'No periods set yet.',
+
+  // billing
+  checkoutTitle: 'Payment',
+  checkoutDescription:
+    'The amount is held now and is only charged once the doctor accepts the referral.',
+  checkoutAmount: 'Amount',
+  checkoutPay: 'Authorise payment',
+  checkoutAuthorised: 'The amount has been held.',
+  checkoutFailed: 'Payment authorisation failed.',
+
+  // doctor inbox
+  inboxTitle: 'Incoming referrals',
+  inboxEmpty: 'No referrals.',
+  inboxAccept: 'Accept referral',
+  inboxDecline: 'Decline',
+  inboxAccepted: 'The referral was accepted and the amount charged.',
+  inboxViewStudies: 'View studies',
+  inboxLockedUntilPayment: 'Images are unavailable until payment completes.',
+
+  // audit
+  auditTitle: 'Audit log',
+  auditDescription: 'An append-only record of every access to patient data.',
+  auditEmpty: 'No events.',
+  auditActor: 'User',
+  auditAction: 'Action',
+  auditWhen: 'Time',
+  auditOutcome: 'Outcome',
+
+  // app shell
+  skipToContent: 'Skip to content',
+  menuTitle: 'Menu',
+  menuOpen: 'Open menu',
+  menuClose: 'Close menu',
+  roleLibyaDoctor: 'Referring doctor (Libya)',
+  rolePatient: 'Patient',
+  roleTunisiaDoctor: 'Receiving doctor (Tunisia)',
+  roleAdmin: 'Administrator',
+  footerDisclaimer: 'A transfer and scheduling service — not a diagnostic tool.',
+  breadcrumbLabel: 'Breadcrumb',
+
+  // table columns
+  colPatient: 'Patient',
+  colDate: 'Date',
+  colActions: 'Actions',
+  colDescription: 'Description',
+  colImages: 'Images',
+
+  // dashboard
+  dashboardOverview: 'Overview',
+  dashboardQuickActions: 'Quick actions',
+  dashboardRecent: 'Recent appointments',
+  dashboardUpcoming: 'Next appointment',
+  dashboardNoUpcoming: 'No upcoming appointment.',
+  dashboardAwaitingDecision: 'Awaiting your decision',
+  dashboardViewAll: 'View all',
+  statPatients: 'Registered patients',
+  statAppointmentsTotal: 'Total appointments',
+
+  // audit extras
+  auditAllowed: 'Allowed',
+  auditDenied: 'Denied',
+  auditFilterAll: 'All',
+  auditFilterActionPlaceholder: 'Filter by action…',
+  auditShowingRecent: 'Showing the most recent events',
+
+  // upload
+  uploadTitle: 'Upload medical imaging',
+  uploadHint:
+    'Choose the study folder from disk. You may close the browser — the upload resumes automatically.',
+  uploadFolderLabel: 'Study folder',
+  uploadDropHint: 'Choose a folder containing DICOM files',
+  uploadResumeNotice: 'Resuming files from the previous session',
+  uploadFiles: 'Files',
+  uploadStatusDone: 'Done',
+  uploadStatusVerifying: 'Verifying',
+  uploadStatusRetrying: 'Retrying',
+  uploadStatusReselect: 'Reselect the folder',
+  uploadStatusFailed: 'Failed',
+  uploadStatusWaiting: 'Waiting',
+
+  // booking extras
+  bookingChoose: 'Choose',
+
+  // viewer
+  viewerTitle: 'Study viewer',
+  viewerPrev: 'Previous',
+  viewerNext: 'Next',
+  viewerFidelityFull: 'Full resolution',
+  viewerFidelityLoading: 'Loading full resolution…',
+  viewerFidelityPreviewOnly: 'Preview only',
+  viewerFidelityPreview: 'Preview',
+  viewerWindowSoft: 'Soft tissue',
+  viewerWindowLung: 'Lung',
+  viewerWindowBone: 'Bone',
+  viewerWindowReset: 'Reset',
+  viewerLazyNote: 'Images are loaded on demand only.',
+
+  // consent management
+  navConsents: 'Consents',
+  consentActiveTitle: 'Active consents',
+  consentNoneActive: 'No active consents.',
+  consentGrantTitle: 'Grant a new consent',
+  consentSelectDoctor: 'Choose the receiving doctor',
+  consentGrantedOn: 'Granted on',
+
+  // viewer extras
+  viewerStudyInfo: 'Study information',
+  viewerModality: 'Modality',
+  viewerDownload: 'Download the original DICOM',
+  viewerDownloadFailed: 'The download failed. Try again.',
+};
+
+export const DICTIONARIES: Record<UiLocale, Dictionary> = { ar, fr, en };
+
+export const LOCALE_NAMES: Record<UiLocale, string> = {
   ar: 'العربية',
   fr: 'Français',
+  en: 'English',
 };
