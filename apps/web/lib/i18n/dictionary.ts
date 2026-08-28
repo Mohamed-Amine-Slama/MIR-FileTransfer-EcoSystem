@@ -233,6 +233,16 @@ const ar = {
   viewerModality: 'النوع',
   viewerDownload: 'تنزيل DICOM الأصلية',
   viewerDownloadFailed: 'تعذّر التنزيل. حاول مرة أخرى.',
+
+  // corridor-driven fields (§4.3) — labels referenced by lib/corridor/registry.ts
+  fieldLicenceNumber: 'رقم الترخيص',
+  fieldFacilityPermit: 'رخصة المنشأة',
+  fieldCnomNumber: 'رقم التسجيل بالهيئة',
+  fieldReferralReason: 'سبب الإحالة',
+  fieldUrgency: 'درجة الاستعجال',
+  fieldPreferredDate: 'التاريخ المفضّل',
+  licensingBodyLyMedicalSyndicate: 'نقابة الأطباء الليبية',
+  licensingBodyTnOrdreDesMedecins: 'العمادة الوطنية للأطباء بتونس',
 } as const;
 
 export type Dictionary = { readonly [K in keyof typeof ar]: string };
@@ -441,6 +451,16 @@ const fr: Dictionary = {
   viewerModality: 'Modalité',
   viewerDownload: 'Télécharger le DICOM original',
   viewerDownloadFailed: 'Échec du téléchargement. Réessayez.',
+
+  // corridor-driven fields (§4.3) — labels referenced by lib/corridor/registry.ts
+  fieldLicenceNumber: 'Numéro de licence',
+  fieldFacilityPermit: 'Autorisation de l’établissement',
+  fieldCnomNumber: 'Numéro d’inscription à l’Ordre',
+  fieldReferralReason: 'Motif de l’orientation',
+  fieldUrgency: 'Degré d’urgence',
+  fieldPreferredDate: 'Date souhaitée',
+  licensingBodyLyMedicalSyndicate: 'Syndicat des médecins de Libye',
+  licensingBodyTnOrdreDesMedecins: 'Conseil national de l’Ordre des médecins de Tunisie',
 };
 
 /**
@@ -670,6 +690,16 @@ const en: Dictionary = {
   viewerModality: 'Modality',
   viewerDownload: 'Download the original DICOM',
   viewerDownloadFailed: 'The download failed. Try again.',
+
+  // corridor-driven fields (§4.3) — labels referenced by lib/corridor/registry.ts
+  fieldLicenceNumber: 'Licence number',
+  fieldFacilityPermit: 'Facility permit',
+  fieldCnomNumber: 'Medical council registration number',
+  fieldReferralReason: 'Reason for referral',
+  fieldUrgency: 'Urgency',
+  fieldPreferredDate: 'Preferred date',
+  licensingBodyLyMedicalSyndicate: 'Libyan Medical Syndicate',
+  licensingBodyTnOrdreDesMedecins: 'Tunisian National Council of Physicians',
 };
 
 export const DICTIONARIES: Record<UiLocale, Dictionary> = { ar, fr, en };
