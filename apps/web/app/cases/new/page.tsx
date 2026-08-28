@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { canSubmitCases, type Case } from '@mir/contracts';
 import { api, type Patient } from '../../../lib/api/endpoints';
 import { casesApi } from '../../../lib/api/mock';
-import { getCorridor } from '../../../lib/corridor/registry';
+import { getCorridor, SOURCE_ROLES } from '../../../lib/corridor/registry';
 import { useCurrentProvider } from '../../../lib/provider/current-provider';
 import { useT } from '../../../lib/i18n/provider';
 import { RoleGate } from '../../../components/RoleGate';
@@ -39,7 +39,7 @@ const DRAFT_KEY = 'mir.case-draft';
 
 export default function NewCasePage(): React.JSX.Element {
   return (
-    <RoleGate allow={['libya_doctor']}>
+    <RoleGate allow={SOURCE_ROLES}>
       <NewCaseForm />
     </RoleGate>
   );

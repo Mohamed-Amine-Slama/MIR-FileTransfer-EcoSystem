@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ChevronRight, FilePlus2 } from 'lucide-react';
 import { CASE_STATUSES, type Case, type CaseStatus } from '@mir/contracts';
 import { casesApi } from '../../lib/api/mock';
+import { PROVIDER_ROLES } from '../../lib/corridor/registry';
 import { useCurrentProvider } from '../../lib/provider/current-provider';
 import { useDateFormat, useT } from '../../lib/i18n/provider';
 import { RoleGate } from '../../components/RoleGate';
@@ -43,7 +44,7 @@ import {
  */
 export default function CasesPage(): React.JSX.Element {
   return (
-    <RoleGate allow={['libya_doctor', 'tunisia_doctor']}>
+    <RoleGate allow={PROVIDER_ROLES}>
       <CasesList />
     </RoleGate>
   );

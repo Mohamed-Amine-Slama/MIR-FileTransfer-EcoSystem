@@ -73,3 +73,31 @@ export function sideForRole(role: Role): CaseSide | null {
   if (corridor === undefined) return null;
   return resolveSide(corridor, role);
 }
+
+/**
+ * Every role that plays one of the given sides, across all configured
+ * corridors — brief §4.3.
+ *
+ * This is what screens use for access gating. Writing
+ * `allow={['libya_doctor', 'tunisia_doctor']}` in a page would hardcode the
+ * corridor into routing, which is precisely what §4.3 forbids; asking for
+ * "whoever the source and destination are" survives adding a corridor.
+ */
+export function rolesForSides(sides: readonly CaseSide[]): Role[] {
+  const roles = new Set<Role>();
+  for (const corridor of CORRIDORS) {
+    if (sides.includes('source')) roles.add(corridor.source.role);
+    if (sides.includes('destination')) roles.add(corridor.destination.role);
+  }
+  if (sides.includes('ops')) roles.add('admin');
+  return [...roles];
+}
+
+/** Both provider sides — the usual gate for a case screen. */
+export const PROVIDER_ROLES: readonly Role[] = rolesForSides(['source', 'destination']);
+
+/** The referring side only — case submission starts there. */
+export const SOURCE_ROLES: readonly Role[] = rolesForSides(['source']);
+
+/** The receiving side only. */
+export const DESTINATION_ROLES: readonly Role[] = rolesForSides(['destination']);

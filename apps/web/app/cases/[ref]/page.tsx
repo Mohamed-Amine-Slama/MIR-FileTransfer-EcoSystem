@@ -5,6 +5,7 @@ import { use, useCallback, useEffect, useState } from 'react';
 import { Paperclip, Send } from 'lucide-react';
 import type { Case, CaseEvent, Message, Provider } from '@mir/contracts';
 import { casesApi } from '../../../lib/api/mock';
+import { PROVIDER_ROLES } from '../../../lib/corridor/registry';
 import { useCurrentProvider } from '../../../lib/provider/current-provider';
 import { useDateFormat, useT } from '../../../lib/i18n/provider';
 import { useSession } from '../../../lib/session/session';
@@ -38,7 +39,7 @@ export default function CaseDetailPage({
 }): React.JSX.Element {
   const { ref } = use(params);
   return (
-    <RoleGate allow={['libya_doctor', 'tunisia_doctor']}>
+    <RoleGate allow={PROVIDER_ROLES}>
       <CaseDetail caseRef={ref} />
     </RoleGate>
   );
