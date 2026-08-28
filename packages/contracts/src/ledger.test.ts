@@ -1,0 +1,124 @@
+import { describe, expect, it } from 'vitest';
+import { type LedgerEntry, ledgerEntrySchema, summariseLedger } from './ledger';
+
+const entries: LedgerEntry[] = [
+  ledgerEntrySchema.parse({
+    kind: 'coordination_fee',
+    id: 'led-1',
+    caseRef: 'MIR-2026-0417',
+    occurredAt: '2026-08-04T11:30:00.000Z',
+    amount: { amountMinor: 25000, currency: 'USD' },
+    status: 'paid',
+  }),
+  ledgerEntrySchema.parse({
+    kind: 'coordination_fee',
+    id: 'led-2',
+    caseRef: 'MIR-2026-0418',
+    occurredAt: '2026-08-06T09:00:00.000Z',
+    amount: { amountMinor: 25000, currency: 'USD' },
+    status: 'pending',
+  }),
+  ledgerEntrySchema.parse({
+    kind: 'saas_subscription',
+    id: 'led-3',
+    periodStart: '2026-08-01T00:00:00.000Z',
+    periodEnd: '2026-08-31T23:59:59.000Z',
+    occurredAt: '2026-08-01T00:00:00.000Z',
+    amount: { amountMinor: 9900, currency: 'EUR' },
+    status: 'overdue',
+  }),
+];
+
+describe('ledger entry', () => {
+  it('links a coordination fee back to its case reference (§5.7)', () => {
+    const [first] = entries;
+    expect(first?.kind).toBe('coordination_fee');
+    if (first?.kind === 'coordination_fee') {
+      expect(first.caseRef).toBe('MIR-2026-0417');
+    }
+  });
+
+  it('refuses a coordination fee with no case, since the fee is per completed case', () => {
+    expect(() =>
+      ledgerEntrySchema.parse({
+        kind: 'coordination_fee',
+        id: 'led-x',
+        occurredAt: '2026-08-04T11:30:00.000Z',
+        amount: { amountMinor: 25000, currency: 'USD' },
+        status: 'paid',
+      }),
+    ).toThrow();
+  });
+
+  it('refuses a subscription charge carrying a case reference, which would blur the two', () => {
+    const parsed = ledgerEntrySchema.parse({
+      kind: 'saas_subscription',
+      id: 'led-y',
+      caseRef: 'MIR-2026-0417',
+      periodStart: '2026-08-01T00:00:00.000Z',
+      periodEnd: '2026-08-31T23:59:59.000Z',
+      occurredAt: '2026-08-01T00:00:00.000Z',
+      amount: { amountMinor: 9900, currency: 'EUR' },
+      status: 'paid',
+    });
+    expect(Object.hasOwn(parsed, 'caseRef')).toBe(false);
+  });
+
+  it('stores money in minor units so no total is ever computed in floating point', () => {
+    expect(() =>
+      ledgerEntrySchema.parse({
+        kind: 'saas_subscription',
+        id: 'led-z',
+        periodStart: '2026-08-01T00:00:00.000Z',
+        periodEnd: '2026-08-31T23:59:59.000Z',
+        occurredAt: '2026-08-01T00:00:00.000Z',
+        amount: { amountMinor: 99.5, currency: 'EUR' },
+        status: 'paid',
+      }),
+    ).toThrow();
+  });
+});
+
+describe('summariseLedger', () => {
+  it('keeps the two charge kinds apart (§5.7 P0)', () => {
+    const summary = summariseLedger(entries);
+    expect(summary.coordinationFees.USD?.amountMinor).toBe(50000);
+    expect(summary.subscriptions.EUR?.amountMinor).toBe(9900);
+  });
+
+  it('exposes no combined total — the requirement is that none can be rendered', () => {
+    const summary = summariseLedger(entries);
+    expect(Object.hasOwn(summary, 'total')).toBe(false);
+    expect(Object.hasOwn(summary, 'amountOwed')).toBe(false);
+    expect(Object.hasOwn(summary, 'balance')).toBe(false);
+  });
+
+  it('groups by currency rather than summing across them (§5.7 multi-currency)', () => {
+    const summary = summariseLedger([
+      ...entries,
+      ledgerEntrySchema.parse({
+        kind: 'coordination_fee',
+        id: 'led-4',
+        caseRef: 'MIR-2026-0419',
+        occurredAt: '2026-08-07T09:00:00.000Z',
+        amount: { amountMinor: 20000, currency: 'EUR' },
+        status: 'pending',
+      }),
+    ]);
+    expect(summary.coordinationFees.USD?.amountMinor).toBe(50000);
+    expect(summary.coordinationFees.EUR?.amountMinor).toBe(20000);
+  });
+
+  it('counts what is outstanding per kind, for the §5.7 payment status indicators', () => {
+    const summary = summariseLedger(entries);
+    expect(summary.outstanding.coordination_fee).toBe(1);
+    expect(summary.outstanding.saas_subscription).toBe(1);
+  });
+
+  it('summarises an empty ledger without inventing a zero total', () => {
+    const summary = summariseLedger([]);
+    expect(summary.coordinationFees).toEqual({});
+    expect(summary.subscriptions).toEqual({});
+    expect(summary.outstanding.coordination_fee).toBe(0);
+  });
+});

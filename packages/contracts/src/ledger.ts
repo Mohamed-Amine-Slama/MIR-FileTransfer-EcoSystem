@@ -1,0 +1,104 @@
+import { z } from 'zod';
+import { caseRefSchema } from './case';
+
+/**
+ * The ledger — brief §5.7.
+ *
+ * WHY A DISCRIMINATED UNION.
+ * §5.7 P0 says coordination fees and subscription charges must never be merged
+ * into one ambiguous "amount owed" line. A single shape with an `amount` and a
+ * `type` field satisfies that only for as long as every future screen remembers
+ * to split them. A union with no common total does not depend on anyone
+ * remembering: there is no field to render, so the ambiguous line cannot be
+ * built by accident. `summariseLedger` returns the same shape for the same
+ * reason.
+ *
+ * Money is minor units plus an explicit currency. Amounts are never floats, and
+ * never summed across currencies (§5.7 multi-currency) — the summary groups.
+ */
+
+export const currencySchema = z.enum(['USD', 'EUR', 'TND', 'LYD']);
+export type CurrencyCode = z.infer<typeof currencySchema>;
+
+export const moneySchema = z.object({
+  amountMinor: z.number().int(),
+  currency: currencySchema,
+});
+export type Money = z.infer<typeof moneySchema>;
+
+export const PAYMENT_STATUSES = ['paid', 'pending', 'overdue'] as const;
+export const paymentStatusSchema = z.enum(PAYMENT_STATUSES);
+export type PaymentStatus = z.infer<typeof paymentStatusSchema>;
+
+const ledgerEntryBase = {
+  id: z.string().min(1),
+  occurredAt: z.string().datetime(),
+  amount: moneySchema,
+  status: paymentStatusSchema,
+};
+
+/** Per completed case, and therefore always carrying its case reference (§5.7 P1). */
+export const coordinationFeeEntrySchema = z.object({
+  ...ledgerEntryBase,
+  kind: z.literal('coordination_fee'),
+  caseRef: caseRefSchema,
+});
+export type CoordinationFeeEntry = z.infer<typeof coordinationFeeEntrySchema>;
+
+/**
+ * Per billing period, and deliberately carrying no case reference. Zod strips
+ * unknown keys by default, so a `caseRef` supplied here is dropped rather than
+ * preserved — the two kinds cannot be blurred even by a careless caller.
+ */
+export const saasSubscriptionEntrySchema = z.object({
+  ...ledgerEntryBase,
+  kind: z.literal('saas_subscription'),
+  periodStart: z.string().datetime(),
+  periodEnd: z.string().datetime(),
+});
+export type SaasSubscriptionEntry = z.infer<typeof saasSubscriptionEntrySchema>;
+
+export const ledgerEntrySchema = z.discriminatedUnion('kind', [
+  coordinationFeeEntrySchema,
+  saasSubscriptionEntrySchema,
+]);
+export type LedgerEntry = z.infer<typeof ledgerEntrySchema>;
+
+type TotalsByCurrency = Partial<Record<CurrencyCode, Money>>;
+
+/**
+ * Deliberately has no `total`, `balance`, or `amountOwed`. See the union note
+ * above — the omission is the feature, and a test asserts the absence.
+ */
+export interface LedgerSummary {
+  coordinationFees: TotalsByCurrency;
+  subscriptions: TotalsByCurrency;
+  outstanding: Record<LedgerEntry['kind'], number>;
+}
+
+function addTo(totals: TotalsByCurrency, amount: Money): void {
+  const existing = totals[amount.currency];
+  totals[amount.currency] = {
+    currency: amount.currency,
+    amountMinor: (existing?.amountMinor ?? 0) + amount.amountMinor,
+  };
+}
+
+export function summariseLedger(entries: readonly LedgerEntry[]): LedgerSummary {
+  const summary: LedgerSummary = {
+    coordinationFees: {},
+    subscriptions: {},
+    outstanding: { coordination_fee: 0, saas_subscription: 0 },
+  };
+
+  for (const entry of entries) {
+    const bucket =
+      entry.kind === 'coordination_fee' ? summary.coordinationFees : summary.subscriptions;
+    addTo(bucket, entry.amount);
+    if (entry.status !== 'paid') {
+      summary.outstanding[entry.kind] += 1;
+    }
+  }
+
+  return summary;
+}
