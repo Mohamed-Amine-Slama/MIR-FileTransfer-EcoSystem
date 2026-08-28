@@ -18,7 +18,7 @@ import {
   Users,
 } from 'lucide-react';
 import type { Role } from '@mir/contracts';
-import { LOCALE_DIRECTION } from '@mir/contracts';
+import { UI_LOCALE_DIRECTION, uiLocaleSchema } from '@mir/contracts';
 import { LOCALE_NAMES } from '../lib/i18n/dictionary';
 import { useLocale, useT } from '../lib/i18n/provider';
 import { useSession } from '../lib/session/session';
@@ -107,7 +107,7 @@ export function AppShell({ children }: { children: ReactNode }): React.JSX.Eleme
     pathname === href || pathname.startsWith(`${href}/`);
 
   return (
-    <DirectionProvider dir={LOCALE_DIRECTION[locale]}>
+    <DirectionProvider dir={UI_LOCALE_DIRECTION[locale]}>
       <div className="flex min-h-screen flex-col">
         <a
           href="#main-content"
@@ -188,7 +188,13 @@ export function AppShell({ children }: { children: ReactNode }): React.JSX.Eleme
                 data-testid="locale-switcher"
                 className="h-9 w-auto"
                 value={locale}
-                onChange={(e) => setLocale(e.target.value === 'fr' ? 'fr' : 'ar')}
+                onChange={(e) => {
+                  // Parsed rather than compared: the previous ternary silently
+                  // fell back to Arabic for any locale it did not name, which
+                  // would have made English unselectable the moment it existed.
+                  const parsed = uiLocaleSchema.safeParse(e.target.value);
+                  if (parsed.success) setLocale(parsed.data);
+                }}
               >
                 {Object.entries(LOCALE_NAMES).map(([code, name]) => (
                   <option key={code} value={code}>

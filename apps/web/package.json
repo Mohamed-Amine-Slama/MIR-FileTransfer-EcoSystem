@@ -5,7 +5,7 @@
   "scripts": {
     "build": "next build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint \"{app,src}/**/*.{ts,tsx}\"",
+    "lint": "eslint \"{app,src,lib,components}/**/*.{ts,tsx}\"",
     "dev": "next dev -p 3001",
     "start": "next start -p 3001",
     "test": "vitest run --passWithNoTests",
