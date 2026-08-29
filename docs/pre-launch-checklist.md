@@ -89,7 +89,7 @@ than let in), but it is unverified.
 
 | Item | Status | Evidence |
 |---|---|---|
-| Interrupted upload resumes on a poor connection | ✅ / ⚠️ | Resume verified (killed at 40%, >35% bytes saved) and browser hard-close verified. **Not tested with a physically severed TCP connection** |
+| Interrupted upload resumes on a poor connection | ✅ | Resume verified three ways: service-level abort, browser hard-close, and a **TCP RST mid-transfer** through an interposed proxy (no FIN) — resumed from server state, checksum matched, deterministic over 5 runs |
 | Concurrency: exactly one booking wins a contested slot | ✅ | 50 concurrent → 1 success, 49 clean 409s; deterministic over 5 rounds |
 | p95 time-to-first-image under target on throttled connection | ✅ | **~1.0s** vs 5s budget at 2 Mbit/s / 200ms, desktop and mobile |
 

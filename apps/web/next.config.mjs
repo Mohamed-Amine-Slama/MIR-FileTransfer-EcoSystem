@@ -93,6 +93,55 @@ const nextConfig = {
             key: 'Strict-Transport-Security',
             value: 'max-age=63072000; includeSubDomains; preload',
           },
+
+          /**
+           * Content Security Policy.
+           *
+           * Built against what this app actually loads, not copied from a
+           * template. Two directives are load-bearing for the viewer and must
+           * not be tightened without re-running `viewer.spec.ts`:
+           *
+           * - `'wasm-unsafe-eval'` — Cornerstone's HTJ2K/JPEG decoders are
+           *   WebAssembly. This token permits WASM compilation and NOTHING
+           *   else; it is specifically not `'unsafe-eval'`, which would also
+           *   permit eval() of JavaScript.
+           * - `worker-src blob:` — the DICOM image loader decodes frames in
+           *   web workers created from blob URLs, and `img-src blob:` because
+           *   decoded frames are handed to the canvas the same way.
+           *
+           * `style-src 'unsafe-inline'` is Next's critical-CSS injection. It
+           * is the one genuine weakening here; removing it needs a nonce
+           * threaded through the document, which Next's App Router does not
+           * make available to a static header.
+           */
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'wasm-unsafe-eval'",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: blob:",
+              "connect-src 'self'",
+              "worker-src 'self' blob:",
+              "font-src 'self'",
+              "object-src 'none'",
+              "base-uri 'none'",
+              "form-action 'self'",
+              "frame-ancestors 'none'",
+              'upgrade-insecure-requests',
+            ].join('; '),
+          },
+
+          // No feature this app uses needs any of these. A compromised script
+          // that cannot reach the camera or geolocation is a smaller problem.
+          {
+            key: 'Permissions-Policy',
+            value:
+              'camera=(), microphone=(), geolocation=(), payment=(), usb=(), ' +
+              'magnetometer=(), gyroscope=(), accelerometer=()',
+          },
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+          { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
         ],
       },
     ];

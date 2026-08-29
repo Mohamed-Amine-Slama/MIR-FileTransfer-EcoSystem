@@ -21,7 +21,7 @@ terraform {
 
 locals {
   keys = {
-    objects = "DICOM originals, derived images, and audit archives"
+    objects  = "DICOM originals, derived images, and audit archives"
     database = "RDS PostgreSQL storage and snapshots"
     secrets  = "AWS Secrets Manager entries"
     backups  = "Backup vaults and archived audit logs"
@@ -34,7 +34,7 @@ resource "aws_kms_key" "this" {
   description = "MIR ${var.environment} — ${each.value}"
 
   # P2.3 gate: `aws kms describe-key` must show rotation enabled on all four.
-  enable_key_rotation = true
+  enable_key_rotation     = true
   rotation_period_in_days = 365
 
   # Deleting a key destroys every object encrypted with it, irreversibly.

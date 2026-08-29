@@ -34,6 +34,11 @@ async function bootstrap(): Promise<void> {
     bodyParser: true,
   });
 
+  // Express advertises itself by default. Disabled at the adapter as well as
+  // stripped in SecurityHeadersMiddleware, so it is never set in the first
+  // place on any path (P14.3, §6).
+  app.getHttpAdapter().getInstance().disable('x-powered-by');
+
   // P7.2 — chunk uploads arrive as raw application/octet-stream and must reach
   // the handler as a Buffer, not a parsed body.
   //

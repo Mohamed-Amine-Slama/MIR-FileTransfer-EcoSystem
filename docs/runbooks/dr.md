@@ -169,6 +169,38 @@ Rules:
 
 ---
 
+## 5. Severed-link upload drill (P7.2)
+
+The automated test (`apps/api/src/modules/imaging/upload-severed.test.ts`)
+interposes a TCP proxy and destroys both sockets mid-transfer — an RST with no
+FIN, which is what a dropped link looks like at the transport layer. It runs in
+CI and is deterministic.
+
+That covers the server's resume contract. It does **not** cover the parts of a
+real link failure that live below the socket: DNS re-resolution, a captive
+portal returning HTTP 200 for everything, a carrier NAT rebinding the source
+port, or a TLS session that has to be renegotiated. Before any pilot with real
+clinics, run this manually against the compose stack:
+
+```bash
+docker compose --profile apps up -d
+# start a large upload through the web UI, then, mid-transfer:
+docker network disconnect mir_default mir-api
+# wait ~30s so the client sees a real timeout, not just a refused connection
+docker network connect mir_default mir-api
+```
+
+Expected: the queue resumes without user action, the completed file's SHA-256
+matches, and the bytes re-sent are materially fewer than the file size.
+
+Record the result here:
+
+| Date | Operator | File size | Resumed? | Checksum | Bytes re-sent | Notes |
+|---|---|---|---|---|---|---|
+| ⬜ | | | | | | |
+
+---
+
 ## What would make this worse
 
 - **Deleting a KMS key.** Every object encrypted with it becomes permanently
