@@ -15,7 +15,7 @@
 # ---------------------------------------------------------------------------
 # base — toolchain shared by every stage
 # ---------------------------------------------------------------------------
-FROM node:22-alpine AS base
+FROM node:26-alpine AS base
 RUN apk add --no-cache libc6-compat
 
 ENV PNPM_HOME=/pnpm
