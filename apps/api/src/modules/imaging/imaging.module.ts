@@ -11,10 +11,11 @@ import { StudiesController } from './internal/studies.controller';
 import { StudyAccessService } from './internal/study-access.service';
 import { ThumbnailService } from './internal/thumbnail.service';
 import { UploadService } from './internal/upload.service';
+import { UploadsController } from './internal/uploads.controller';
 
 @Module({
   imports: [DatabaseModule, EventsModule, StorageModule],
-  controllers: [DicomWebController, StudiesController],
+  controllers: [DicomWebController, StudiesController, UploadsController],
   providers: [
     UploadService,
     IngestionService,

@@ -153,6 +153,13 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
 
+      # Both steps above passing proves the tree is clean. It does NOT prove
+      # they would catch anything: a raised threshold or a scanner pointed at
+      # the wrong path stays green forever while enforcing nothing. This plants
+      # a known-vulnerable package and fails if the scan does not go red.
+      - name: Verify the dependency scan still blocks a vulnerable package
+        run: pnpm scan:verify
+
   # --------------------------------------------------------------------------
   # P1.4 — module boundaries. Separate job so a boundary violation is
   # immediately legible in the checks list rather than buried in a lint log.

@@ -9,6 +9,10 @@ patient."
 
 - ✅ **Verified** — a test or command was run and its output observed. The
   evidence column says which.
+- 🏠 **Local** — the verification was executed and its output observed, but
+  against a **local stand-in** rather than the deployed target. Real evidence,
+  and not a substitute for the real environment. Never counts toward launch.
+  The note always names what stood in for what.
 - ⬜ **Open** — not done. No partial credit.
 - 🔒 **Blocked** — cannot be done from this repository; needs credentials, a
   third party, or a legal answer.
@@ -97,7 +101,7 @@ than let in), but it is unverified.
 |---|---|---|
 | Pen test complete, high/critical remediated | 🔒 **open** | Not commissioned. **Spec: do not onboard real patients before this** |
 | Secret scanning enforced in CI | ✅ | gitleaks; proven to catch planted AWS/GitHub/Orthanc credentials |
-| Dependency scanning enforced in CI | ⚠️ partial | Job added (`pnpm audit` + Trivy, fail on high/critical). **Not yet demonstrated red** with a deliberately vulnerable dependency |
+| Dependency scanning enforced in CI | ✅ | `pnpm scan:verify` plants minimist@1.2.5 (GHSA-xvch-5gv4-984h), asserts audit goes red **by advisory id**, restores the tree byte-for-byte |
 | Log scrubbing verified with real sensitive payloads | ✅ | 16 tests; patient name + JWT stripped from logs and Sentry payloads. One **documented limitation** below |
 | Audit log immutability verified | ✅ | UPDATE and DELETE both denied to `mir_app`; row survives both |
 

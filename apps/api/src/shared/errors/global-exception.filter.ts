@@ -108,6 +108,12 @@ const VALIDATION_ERROR_NAMES = new Set([
   'InvalidPhoneError',
   'ConsentTextMismatchError',
   'DicomValidationError',
+  // A corrupt transfer is bad input, not a server fault. Returning 500 would
+  // tell a doctor on a dropping link "the server broke" — inviting a blind
+  // retry — when the correct signal is "those bytes were corrupt, send the
+  // file again" (P7.2). The message names no identifiers; the expected and
+  // actual digests stay on the error object, server-side.
+  'ChecksumMismatchError',
 ]);
 
 function isDomainValidationError(err: unknown): err is Error {
