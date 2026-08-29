@@ -124,6 +124,21 @@ services:
       postgres:
         condition: service_healthy
 
+  # OpenTelemetry collector — PHASE 13.
+  #
+  # Behind the `apps` profile so `docker compose up -d postgres redis` is
+  # unaffected. Spans are scrubbed by the Tracer BEFORE they reach any
+  # exporter, so what arrives here is what would arrive at a managed backend.
+  otel-collector:
+    profiles: ['apps']
+    image: otel/opentelemetry-collector-contrib:0.115.1
+    container_name: mir-otel-collector
+    command: ['--config=/etc/otel/config.yaml']
+    volumes:
+      - ./infra/otel/collector-config.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - '${OTEL_HTTP_PORT:-4318}:4318'
+
   # --- application containers (profile: apps) -------------------------------
 
   migrate:

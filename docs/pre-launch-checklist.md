@@ -190,7 +190,7 @@ above supports.
 | P10 Scheduling | ✅ |
 | P11 Payments | ✅ code; **rail viability unresolved (L7/D2a)** |
 | P12 Notifications | ✅ templates + guard; no delivery provider wired |
-| P13 Observability | ✅ scrubbing + tracing; no collector wired |
+| P13 Observability | ✅ scrubbing + tracing; spans ship to a real OTLP collector and arrive redacted (verified 2026-08-29) |
 | P14 Hardening | ⚠️ threat model + dep scanning written; **no pen test**, no edge config |
 | P15 Resilience | ⬜ runbooks written, **no drills run** |
 | P16 This checklist | ✅ |

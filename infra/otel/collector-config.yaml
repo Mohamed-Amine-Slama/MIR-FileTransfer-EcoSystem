@@ -1,0 +1,40 @@
+# OpenTelemetry Collector — BUILD_SPEC PHASE 13.
+#
+# Local development only. Deployed environments ship to a managed backend; what
+# this proves locally is that the API's spans LEAVE THE PROCESS and arrive
+# somewhere intact, which "the exporter writes JSON to stdout" never did.
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  # Bound memory: a collector that OOMs takes the container with it, and in a
+  # compose stack that looks like an application fault.
+  batch:
+    timeout: 1s
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+
+exporters:
+  # `debug` rather than a backend: a developer needs to SEE the spans arrive.
+  # detailed verbosity prints attributes, which is what makes the scrubbing
+  # visible at the destination rather than merely asserted in a unit test.
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]
+  telemetry:
+    logs:
+      level: info

@@ -4,8 +4,7 @@ import {
   InMemorySpanExporter,
   Tracer,
   normaliseRoute,
-  sanitiseAttributes,
-} from './tracing';
+  sanitiseAttributes, OtlpSpanExporter } from './tracing';
 
 /**
  * BUILD_SPEC PHASE 13 item 1 — traces across API → DB → Orthanc → S3.
@@ -119,5 +118,82 @@ describe('PHASE 13 tracing', () => {
       's3.getObject',
       'GET /dicom-web/studies/:uid',
     ]);
+  });
+})
+
+describe('PHASE 13 — spans actually ship (OTLP), and are still scrubbed', () => {
+  /**
+   * Until the OTLP exporter existed, spans were created, named and scrubbed
+   * but never left the process. The risk in adding a wire format is not that
+   * traces fail to ship — it is that a SECOND export path becomes a second
+   * place for patient data to escape.
+   *
+   * These tests capture the actual HTTP body the exporter would send.
+   */
+  function captureExport(): { bodies: unknown[]; restore: () => void } {
+    const bodies: unknown[] = [];
+    const original = globalThis.fetch;
+    globalThis.fetch = ((_url: string, init?: { body?: string }) => {
+      bodies.push(JSON.parse(init?.body ?? '{}'));
+      return Promise.resolve({ ok: true, status: 200 } as Response);
+    }) as typeof fetch;
+    return { bodies, restore: () => { globalThis.fetch = original; } };
+  }
+
+  it('scrubs patient identifiers on the OTLP path, not only the JSON one', async () => {
+    const cap = captureExport();
+    try {
+      const tracer = new Tracer(new OtlpSpanExporter({ endpoint: 'http://collector:4318' }));
+
+      const span = tracer.startSpan('imaging.upload', 'server', {
+        'patient.name': 'Fatima Al-Mansouri',
+        authorization: 'Bearer eyJhbGciOiJSUzI1NiJ9.abc.def',
+        'patient.phone': '+218912345678',
+      });
+      tracer.endSpan(span);
+      await Promise.resolve();
+
+      const wire = JSON.stringify(cap.bodies);
+      expect(wire).not.toContain('Fatima');
+      expect(wire).not.toContain('Al-Mansouri');
+      expect(wire).not.toContain('eyJhbGciOiJSUzI1NiJ9');
+      expect(wire).not.toContain('912345678');
+    } finally {
+      cap.restore();
+    }
+  });
+
+  it('sends one OTLP request per span, carrying the trace id', async () => {
+    const cap = captureExport();
+    try {
+      const tracer = new Tracer(new OtlpSpanExporter({ endpoint: 'http://collector:4318' }));
+      const root = tracer.startSpan('GET /studies', 'server', {});
+      tracer.endSpan(root);
+      await Promise.resolve();
+
+      expect(cap.bodies).toHaveLength(1);
+      const sent = cap.bodies[0] as {
+        resourceSpans: { scopeSpans: { spans: { traceId: string; name: string }[] }[] }[];
+      };
+      const shipped = sent.resourceSpans[0]!.scopeSpans[0]!.spans[0]!;
+      expect(shipped.traceId).toBe(root.traceId);
+      expect(shipped.name).toBe('GET /studies');
+    } finally {
+      cap.restore();
+    }
+  });
+
+  it('does not throw when the collector is unreachable', async () => {
+    // Telemetry must never fail a request carrying patient imaging.
+    const original = globalThis.fetch;
+    globalThis.fetch = (() => Promise.reject(new Error('ECONNREFUSED'))) as typeof fetch;
+    try {
+      const tracer = new Tracer(new OtlpSpanExporter({ endpoint: 'http://nope:4318' }));
+      const span = tracer.startSpan('GET /studies', 'server', {});
+      expect(() => tracer.endSpan(span)).not.toThrow();
+      await Promise.resolve();
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });

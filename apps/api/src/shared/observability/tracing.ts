@@ -58,6 +58,35 @@ const FORBIDDEN_ATTRIBUTES = new Set([
 ]);
 
 /**
+ * Attribute KEYS that name a patient identifier directly.
+ *
+ * The value-level scrubber cannot help here. A phone number or a token has a
+ * detectable shape; a personal name does not — "Fatima Al-Mansouri" is
+ * indistinguishable from any other string (the limitation documented in
+ * docs/pre-launch-checklist.md).
+ *
+ * But when the KEY says `patient.name`, no detection is needed: the caller has
+ * declared what the value is. Dropping on the key closes the case the value
+ * scrubber structurally cannot.
+ *
+ * `patient.id` is deliberately NOT here: a UUID is the join key an
+ * investigation needs (P4.4) and carries no personal information by itself.
+ */
+const IDENTIFYING_ATTRIBUTE_KEYS = [
+  'patient.name',
+  'patient.full_name',
+  'patient.fullname',
+  'patient.phone',
+  'patient.dob',
+  'patient.date_of_birth',
+  'patient.national_id',
+  'user.name',
+  'user.full_name',
+  'actor.name',
+  'doctor.name',
+];
+
+/**
  * Strip identifiers out of a URL path so it can be a span name.
  *
  * `/patients/018f8e6a-.../claim-token` becomes `/patients/:id/claim-token`.
@@ -148,7 +177,13 @@ export function sanitiseAttributes(attributes: SpanAttributes): SpanAttributes {
   const out: SpanAttributes = {};
   for (const [key, value] of Object.entries(attributes)) {
     if (value === undefined) continue;
-    if (FORBIDDEN_ATTRIBUTES.has(key.toLowerCase())) continue;
+    const lower = key.toLowerCase();
+    if (FORBIDDEN_ATTRIBUTES.has(lower)) continue;
+    // The key declares the value is identifying, so no detection is required.
+    if (IDENTIFYING_ATTRIBUTE_KEYS.includes(lower)) {
+      out[key] = '[redacted]';
+      continue;
+    }
     out[key] = typeof value === 'string' ? (scrubForLog(value) as string) : value;
   }
   return out;
@@ -174,6 +209,105 @@ export class ConsoleSpanExporter implements SpanExporter {
     );
   }
 }
+
+/**
+ * Ships spans to an OTLP/HTTP collector — BUILD_SPEC PHASE 13.
+ *
+ * Until this existed, spans were created, named and scrubbed but never left
+ * the process: the exporter wrote JSON to stdout. "Traces across API -> DB ->
+ * Orthanc -> S3" was unproven as a delivered pipeline.
+ *
+ * Deliberately hand-rolled against the OTLP/HTTP JSON protocol rather than
+ * pulling in the full OpenTelemetry SDK. The Span type here is already the
+ * shape this project needs, the scrubbing contract above is the property that
+ * matters, and the SDK would add a second span pipeline whose sanitisation
+ * path is not this one.
+ *
+ * FIRE AND FORGET, on purpose: telemetry must never delay or fail a request
+ * carrying patient imaging. A collector that is down is a monitoring problem,
+ * not a clinical one.
+ */
+export class OtlpSpanExporter implements SpanExporter {
+  private readonly endpoint: string;
+  private readonly serviceName: string;
+  private failures = 0;
+
+  constructor(options: { endpoint: string; serviceName?: string }) {
+    this.endpoint = options.endpoint.replace(/\/$/, '');
+    this.serviceName = options.serviceName ?? 'mir-api';
+  }
+
+  export(span: Span): void {
+    // The span reaching here has ALREADY been scrubbed by the Tracer — this
+    // class must not be a second place where raw attributes could escape, so
+    // it serialises what it is given and adds nothing.
+    const body = {
+      resourceSpans: [
+        {
+          resource: {
+            attributes: [
+              { key: 'service.name', value: { stringValue: this.serviceName } },
+            ],
+          },
+          scopeSpans: [
+            {
+              scope: { name: 'mir' },
+              spans: [
+                {
+                  traceId: span.traceId,
+                  spanId: span.spanId,
+                  ...(span.parentSpanId === undefined
+                    ? {}
+                    : { parentSpanId: span.parentSpanId }),
+                  name: span.name,
+                  kind: OTLP_KIND[span.kind] ?? 0,
+                  startTimeUnixNano: `${span.startedAt * 1_000_000}`,
+                  endTimeUnixNano: `${(span.endedAt ?? Date.now()) * 1_000_000}`,
+                  attributes: Object.entries(span.attributes).map(([key, value]) => ({
+                    key,
+                    value:
+                      typeof value === 'number'
+                        ? { doubleValue: value }
+                        : typeof value === 'boolean'
+                          ? { boolValue: value }
+                          : { stringValue: String(value) },
+                  })),
+                  status:
+                    span.status === 'error'
+                      ? { code: 2, ...(span.error === undefined ? {} : { message: span.error }) }
+                      : { code: 1 },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    void fetch(`${this.endpoint}/v1/traces`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(() => {
+      // Log once, then stay quiet: a collector outage must not turn every
+      // request into a second error in the logs.
+      this.failures += 1;
+      if (this.failures === 1) {
+        // eslint-disable-next-line no-console -- telemetry sink is unavailable
+        console.warn(`[tracing] OTLP export failed; suppressing further warnings`);
+      }
+    });
+  }
+}
+
+/** OTLP SpanKind enum values. */
+const OTLP_KIND: Record<string, number> = {
+  server: 2,
+  client: 3,
+  internal: 1,
+  producer: 4,
+  consumer: 5,
+};
 
 /** Collects spans in memory. For tests and local inspection. */
 export class InMemorySpanExporter implements SpanExporter {
