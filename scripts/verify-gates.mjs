@@ -25,7 +25,7 @@ const GATES = [
   ['P2.1', 'terraform plan clean, remote state', 'blocked', 'no AWS account; fmt/validate/checkov run in CI (194 pass, 0 fail)'],
   ['P2.2', 'DB unreachable from internet', 'blocked', 'needs a real connection attempt'],
   ['P2.3', 'Four KMS keys, rotation on', 'blocked', 'no AWS account'],
-  ['P2.4', 'Object Lock delete REJECTED', 'blocked', 'MOST IMPORTANT INFRA GATE - never run'],
+  ['P2.4', 'Object Lock delete REJECTED', 'blocked', 'MOST IMPORTANT INFRA GATE - probe written (verify:object-lock); LocalStack cannot prove it, needs real S3'],
   ['P2.5', 'Failover + PITR restore', 'blocked', 'RTO/RPO unmeasured'],
   ['P2.6', 'Health check over TLS 1.3', 'blocked', 'no deployment'],
   ['P3.1', 'migrate up/down/up', 'verified', '8 migrations'],

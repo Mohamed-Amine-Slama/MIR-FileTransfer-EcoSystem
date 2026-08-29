@@ -99,11 +99,29 @@ present, since that would make every token claim a second factor.
 
 | Item | Status | Evidence |
 |---|---|---|
-| Object Lock verified — originals cannot be deleted | 🔒 **open** | Terraform written (compliance mode). **The delete-rejection probe has never been run.** This is the spec's single most important infra gate |
+| Object Lock verified — originals cannot be deleted | 🔒 **open** | Terraform written (compliance mode). The probe is now **written and runnable** (`pnpm verify:object-lock`), but **has never run against real S3**. This is the spec's single most important infra gate — see the LocalStack note below |
 | Cross-region replication verified | 🔒 open | Configured, never applied |
 | Checksums verified end-to-end on upload | ✅ | `upload.test.ts` — SHA-256 over decoded original; corrupt chunk rejected |
 | PITR restore drill completed within target RTO | 🔒 open / 🏠 local | Managed RDS PITR **unmeasured** (no account). A **local** basebackup restore was executed 2026-08-29: RTO 123.2 s, 18/18 instances still mapped to the right patient and checksum, RLS and the booking exclusion constraint survived. Not the RDS figure — see `dr.md` |
 | No lossy transcoding anywhere in the pipeline | ✅ | Byte-for-byte equality asserted; Orthanc `IngestTranscoding` omitted; lossy syntaxes flagged not converted |
+
+**Object Lock — why LocalStack does not count.** The probe was exercised
+against LocalStack 3.8 on 2026-08-29 to validate its own logic. It confirmed
+the mechanics: COMPLIANCE mode is detected, the upload is versioned and
+inherits retention, and **deleting the object version is rejected while the
+object survives**. Two assertions could not be exercised, both LocalStack
+fidelity limits rather than probe defects:
+
+- **The reason for the rejection.** LocalStack returns a bare `AccessDenied`
+  with no mention of Object Lock, so the check distinguishing *lock-enforced*
+  from *policy-enforced* cannot fire. That distinction is the whole point — an
+  object "protected" by a bucket policy is deletable by anyone who can edit
+  that policy — and it remains **unproven**.
+- **Anonymous access.** LocalStack reports `RestrictPublicBuckets: true` and
+  then serves the object anonymously with HTTP 200. It stores the
+  public-access-block configuration without enforcing it.
+
+Cross-region replication was not exercised at all. **P2.4 stays blocked.**
 
 ---
 
