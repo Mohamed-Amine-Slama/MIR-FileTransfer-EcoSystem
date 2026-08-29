@@ -172,7 +172,7 @@ mistakes it for coverage.
 | Item | Status | Evidence |
 |---|---|---|
 | Alerts fire and reach a human on call | ⬜ open | Detection logic written and tested; **no on-call rotation exists** |
-| Incident response runbook exercised | ⬜ open | Written (`docs/runbooks/incident-response.md`); **tabletop not run** |
+| Incident response runbook exercised | ✅ / ⚠️ | Forensic queries **executed** against seeded data 2026-08-29; 4 gaps found and fixed, incl. one returning an empty audit log rather than an error. **Live multi-person tabletop still outstanding** |
 | Staging contains zero real patient records — verified by query | 🔒 open | No staging exists. ADR-7 enforced in CI for `test-data/` |
 
 ---
@@ -210,7 +210,7 @@ above supports.
 | P12 Notifications | ✅ templates + guard; no delivery provider wired |
 | P13 Observability | ✅ scrubbing + tracing; spans ship to a real OTLP collector and arrive redacted (verified 2026-08-29) |
 | P14 Hardening | ⚠️ threat model + dep scanning written; **no pen test**, no edge config |
-| P15 Resilience | ⬜ runbooks written, **no drills run** |
+| P15 Resilience | ⚠️ restore drill + IR query walkthrough executed; region-failure drill and live tabletop outstanding |
 | P16 This checklist | ✅ |
 
 ---

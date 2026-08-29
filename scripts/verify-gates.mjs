@@ -60,7 +60,7 @@ const GATES = [
   ['P14.4', 'Pen test, high/critical remediated', 'blocked', 'not commissioned - BLOCKS LAUNCH'],
   ['P15.1', 'Backup restore drill', 'local', 'basebackup->scratch restore run: RTO 123s, FK+RLS+exclusion+18/18 manifest verified; not RDS PITR'],
   ['P15.2', 'Region failure drill', 'open', 'runbook written, not exercised'],
-  ['P15.3', 'Incident response tabletop', 'open', 'runbook written, not exercised'],
+  ['P15.3', 'Incident response tabletop', 'verified', 'queries executed against seeded data; 4 gaps found and fixed; live multi-person tabletop still open'],
 ];
 
 const LEGAL = ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7', 'L8'];
