@@ -48,8 +48,8 @@ resource "aws_s3_bucket" "originals" {
   }
 
   tags = merge(var.tags, {
-    Name        = local.originals_name
-    DataClass   = "patient-imaging"
+    Name           = local.originals_name
+    DataClass      = "patient-imaging"
     SourceOfRecord = "true"
   })
 }

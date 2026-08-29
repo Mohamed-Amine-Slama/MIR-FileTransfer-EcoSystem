@@ -234,3 +234,45 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report/
           retention-days: 7
+
+  # --------------------------------------------------------------------------
+  # Terraform static checks.
+  #
+  # This closes NO gate. Every P2 gate stays blocked — there is no AWS account,
+  # and `terraform plan` needs credentials and a state backend. What this does
+  # is stop ~2,700 lines of infrastructure nobody can apply from rotting
+  # silently before the account exists: a syntax error or a dropped argument
+  # would otherwise be discovered under launch pressure.
+  # --------------------------------------------------------------------------
+  terraform:
+    name: Terraform static checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          # Matches required_version "~> 1.9" in the environment stacks.
+          terraform_version: 1.9.8
+
+      - name: Format
+        run: terraform fmt -check -recursive infra/terraform
+
+      # -backend=false: init would otherwise try to reach the S3 state bucket,
+      # which does not exist and needs credentials. validate does not need it.
+      - name: Validate modules and environments
+        run: |
+          set -euo pipefail
+          for dir in infra/terraform/modules/*/ infra/terraform/environments/*/; do
+            echo "==> $dir"
+            terraform -chdir="$dir" init -backend=false -input=false >/dev/null
+            terraform -chdir="$dir" validate
+          done
+
+      - name: Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: infra/terraform
+          framework: terraform
+          quiet: true
+          soft_fail: false

@@ -92,7 +92,7 @@ resource "aws_db_instance" "this" {
   # 30-day PITR (P2.5).
   backup_retention_period = 30
   backup_window           = "02:00-03:00"
-  maintenance_window       = "sun:03:30-sun:04:30"
+  maintenance_window      = "sun:03:30-sun:04:30"
   copy_tags_to_snapshot   = true
 
   # Deletion protection ON. Combined with skip_final_snapshot = false, an

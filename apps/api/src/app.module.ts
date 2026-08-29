@@ -7,6 +7,7 @@ import { ConfigModule } from './shared/config/config.module';
 import { RequestContextMiddleware } from './shared/context/request-context.middleware';
 import { DatabaseModule } from './shared/db/database.module';
 import { GlobalExceptionFilter } from './shared/errors/global-exception.filter';
+import { SecurityHeadersMiddleware } from './shared/http/security-headers.middleware';
 import { EventsModule } from './shared/events/events.module';
 import { AuditModule } from './modules/audit';
 import { BillingModule } from './modules/billing';
@@ -53,6 +54,10 @@ import { SchedulingModule } from './modules/scheduling';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
+    // P14.3 — security headers first, so they are set before any handler can
+    // short-circuit and before the exception filter renders an error.
+    consumer.apply(SecurityHeadersMiddleware).forRoutes('*');
+
     // Must cover every route: this opens the AsyncLocalStorage scope that the
     // auth guard fills in and that DatabaseService reads to set the RLS
     // session context. A route without it fails at request time, not at boot.
