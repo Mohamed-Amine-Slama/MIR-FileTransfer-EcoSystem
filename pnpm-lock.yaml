@@ -60,8 +60,8 @@ importers:
         specifier: ^11.2.1
         version: 11.2.1(@nestjs/common@11.2.1(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.1)
       '@types/pg':
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.23.1
+        version: 8.23.1
       dicom-parser:
         specifier: ^1.8.21
         version: 1.8.21
@@ -2110,8 +2110,8 @@ packages:
   '@types/node@22.20.1':
     resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}
 
-  '@types/pg@8.21.0':
-    resolution: {integrity: sha512-AYdtudzabjLZgVgRZmAnU8bAnVUXzuJX2IYHeSIiIHm68olD+LgQYCGWdtcNYnP0uq9c4S4NibVG3Ni7VbKW7Q==}
+  '@types/pg@8.23.1':
+    resolution: {integrity: sha512-fKVHpikPdg4GKks3JuLEhvwSyvwzF23hnabPy6DD8ljVbC7+6J5dQzdv4arV6jqq57djnMgs1HKBxX4P8aBI3A==}
 
   '@types/qs@6.15.1':
     resolution: {integrity: sha512-GZHUBZR9hckSUhrxmp1nG6NwdpM9fCunJwyThLW1X3AyHgd9IlHb6VANpQQqDr2o/qQp6McZ3y/IA2rVzKzSbw==}
@@ -5911,7 +5911,7 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@types/pg@8.21.0':
+  '@types/pg@8.23.1':
     dependencies:
       '@types/node': 22.20.1
       pg-protocol: 1.16.0

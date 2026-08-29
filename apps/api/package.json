@@ -21,7 +21,7 @@
     "@nestjs/common": "^11.2.1",
     "@nestjs/core": "^11.2.1",
     "@nestjs/platform-express": "^11.2.1",
-    "@types/pg": "^8.21.0",
+    "@types/pg": "^8.23.1",
     "dicom-parser": "^1.8.21",
     "dotenv": "^16.4.7",
     "jose": "^6.2.8",
