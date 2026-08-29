@@ -33,7 +33,7 @@ const intFromEnv = (label: string, min: number, max: number) =>
 
 export const configSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'staging', 'production']),
-  PORT: intFromEnv('PORT', 1, 65535).default('3000'),
+  PORT: intFromEnv('PORT', 1, 65535).prefault('3000'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 
   // --- database ------------------------------------------------------------
@@ -45,7 +45,7 @@ export const configSchema = z.object({
     (v) => v.startsWith('postgres://') || v.startsWith('postgresql://'),
     'DATABASE_URL must be a postgres:// or postgresql:// connection string',
   ),
-  DATABASE_POOL_MAX: intFromEnv('DATABASE_POOL_MAX', 1, 200).default('10'),
+  DATABASE_POOL_MAX: intFromEnv('DATABASE_POOL_MAX', 1, 200).prefault('10'),
 
   // --- cache / queue -------------------------------------------------------
   REDIS_URL: nonEmpty('REDIS_URL').refine(
@@ -78,13 +78,13 @@ export const configSchema = z.object({
 
   // --- upload (P7.2) -------------------------------------------------------
   UPLOAD_CHUNK_SIZE_BYTES: intFromEnv('UPLOAD_CHUNK_SIZE_BYTES', 256 * 1024, 64 * 1024 * 1024)
-    .default(String(5 * 1024 * 1024)),
-  UPLOAD_SESSION_TTL_HOURS: intFromEnv('UPLOAD_SESSION_TTL_HOURS', 1, 720).default('72'),
+    .prefault(String(5 * 1024 * 1024)),
+  UPLOAD_SESSION_TTL_HOURS: intFromEnv('UPLOAD_SESSION_TTL_HOURS', 1, 720).prefault('72'),
 
   // --- signed URLs (P8.2) --------------------------------------------------
   // Spec requires 5-15 minutes. The bounds are enforced here so a deployment
   // cannot quietly widen the window to hours.
-  SIGNED_URL_TTL_SECONDS: intFromEnv('SIGNED_URL_TTL_SECONDS', 300, 900).default('600'),
+  SIGNED_URL_TTL_SECONDS: intFromEnv('SIGNED_URL_TTL_SECONDS', 300, 900).prefault('600'),
   // Dedicated key for URL signing. Separate from any session secret so the two
   // can be rotated independently — rotating session keys must not silently
   // invalidate every in-flight image request, and vice versa.
@@ -95,7 +95,7 @@ export const configSchema = z.object({
   // --- scheduling (DECISION D3) -------------------------------------------
   // Default OFF: the Tunisian doctor sees imaging only after payment succeeds.
   // Consent is required in BOTH modes; this toggle never bypasses consent.
-  SCHEDULING_TRIAGE_BEFORE_PAYMENT: boolFromEnv.default('false'),
+  SCHEDULING_TRIAGE_BEFORE_PAYMENT: boolFromEnv.prefault('false'),
 
   // --- billing (DECISION D2) ----------------------------------------------
   // Authorise at booking, capture on acceptance. An authorisation that is
@@ -104,7 +104,7 @@ export const configSchema = z.object({
     'PAYMENT_AUTHORIZATION_WINDOW_HOURS',
     1,
     720,
-  ).default('72'),
+  ).prefault('72'),
 
   // --- billing (DECISION D2a: Stripe) -------------------------------------
   // Secret key and webhook secret come from AWS Secrets Manager (§6) and are
@@ -128,14 +128,14 @@ export const configSchema = z.object({
   // shape here does not have to change — the amount is already resolved
   // server-side, never sent by the client. A client-supplied amount would let
   // a patient authorise one dinar for a consultation.
-  CONSULTATION_FEE_MINOR: intFromEnv('CONSULTATION_FEE_MINOR', 1, 100_000_000).default('15000'),
+  CONSULTATION_FEE_MINOR: intFromEnv('CONSULTATION_FEE_MINOR', 1, 100_000_000).prefault('15000'),
 
   // --- retention (BLOCKING L5) --------------------------------------------
   // These values are placeholders until counsel answers L5. They are config
   // precisely so the legal answer is a deployment change, not a rewrite.
   // Object Lock retention on the originals bucket must be set to match.
-  IMAGING_RETENTION_DAYS: intFromEnv('IMAGING_RETENTION_DAYS', 1, 36_500).default('3650'),
-  AUDIT_RETENTION_DAYS: intFromEnv('AUDIT_RETENTION_DAYS', 1, 36_500).default('3650'),
+  IMAGING_RETENTION_DAYS: intFromEnv('IMAGING_RETENTION_DAYS', 1, 36_500).prefault('3650'),
+  AUDIT_RETENTION_DAYS: intFromEnv('AUDIT_RETENTION_DAYS', 1, 36_500).prefault('3650'),
 
   // --- consent (BLOCKING L4) ----------------------------------------------
   CONSENT_TERMS_VERSION: nonEmpty('CONSENT_TERMS_VERSION').default('v1'),
