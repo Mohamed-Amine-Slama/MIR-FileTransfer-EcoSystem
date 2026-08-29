@@ -6,6 +6,7 @@ import { BellRing, FileUp, MessageSquare, RefreshCw } from 'lucide-react';
 import { unreadCount, type Notification, type NotificationKind } from '@mir/contracts';
 import { casesApi } from '../../lib/api/mock';
 import { rolesForSides } from '../../lib/corridor/registry';
+import { useCaseAudience } from '../../lib/provider/current-provider';
 import type { Dictionary } from '../../lib/i18n/dictionary';
 import { useDateFormat, useT } from '../../lib/i18n/provider';
 import { RoleGate } from '../../components/RoleGate';
@@ -65,21 +66,24 @@ function notificationTitle(t: Dictionary, notification: Notification): string {
 function NotificationCentre(): React.JSX.Element {
   const t = useT();
   const formatDate = useDateFormat();
+  const { audience, loading: audienceLoading } = useCaseAudience();
   const [items, setItems] = useState<Notification[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (audience === null) return;
     try {
-      setItems(await casesApi.listNotifications());
+      setItems(await casesApi.listNotifications(audience));
     } catch {
       setError(t.genericError);
       setItems([]);
     }
-  }, [t]);
+  }, [t, audience]);
 
   useEffect(() => {
+    if (audienceLoading) return;
     void load();
-  }, [load]);
+  }, [load, audienceLoading]);
 
   const markRead = async (id: string): Promise<void> => {
     // Optimistic: the row is already on screen and the write cannot conflict

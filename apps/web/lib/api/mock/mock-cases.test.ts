@@ -162,12 +162,12 @@ describe('mock cases api mutations', () => {
   });
 
   it('marks a notification read without disturbing the others (§5.6)', async () => {
-    const before = await mockCasesApi.listNotifications();
+    const before = await mockCasesApi.listNotifications(SOURCE);
     const unread = before.find((n) => n.readAt === undefined);
     expect(unread).toBeDefined();
     if (unread === undefined) return;
     await mockCasesApi.markNotificationRead(unread.id);
-    const after = await mockCasesApi.listNotifications();
+    const after = await mockCasesApi.listNotifications(SOURCE);
     expect(after.find((n) => n.id === unread.id)?.readAt).toBeDefined();
     expect(after).toHaveLength(before.length);
   });
@@ -218,6 +218,14 @@ describe('case reads are scoped to the parties (§5.4 P0, §4.4)', () => {
     const stranger: CaseAudience = { kind: 'provider', providerId: 'prov-stranger' };
     expect(await mockCasesApi.listCaseEvents('MIR-2026-0417', stranger)).toEqual([]);
     expect(await mockCasesApi.listMessages('MIR-2026-0417', stranger)).toEqual([]);
+  });
+
+  it('does not leak which cases exist through the notification list', async () => {
+    // A notification names a case reference. Listing them unscoped would tell
+    // a stranger which references are real — the disclosure getCase avoids.
+    const stranger: CaseAudience = { kind: 'provider', providerId: 'prov-stranger' };
+    expect(await mockCasesApi.listNotifications(stranger)).toEqual([]);
+    expect((await mockCasesApi.listNotifications(SOURCE)).length).toBeGreaterThan(0);
   });
 
   it('serves ops any case, which is what §5.8 oversight requires', async () => {

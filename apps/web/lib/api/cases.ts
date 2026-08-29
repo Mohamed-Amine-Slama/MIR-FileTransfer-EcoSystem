@@ -100,7 +100,12 @@ export interface CasesApi {
     authorSide: CaseSide,
   ): Promise<Message>;
 
-  listNotifications(): Promise<Notification[]>;
+  /**
+   * Scoped like every other case read. A notification names a case reference,
+   * so an unscoped list would leak which cases exist to whoever asked — the
+   * same disclosure `getCase` is careful to avoid, arriving by a side door.
+   */
+  listNotifications(audience: CaseAudience): Promise<Notification[]>;
   markNotificationRead(id: string): Promise<void>;
 
   getProvider(id: string): Promise<Provider | null>;

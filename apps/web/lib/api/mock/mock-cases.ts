@@ -232,9 +232,9 @@ export const mockCasesApi: CasesApi = {
     return created;
   },
 
-  async listNotifications(): Promise<Notification[]> {
+  async listNotifications(audience: CaseAudience): Promise<Notification[]> {
     return notifications
-      .slice()
+      .filter((n) => findVisible(n.caseRef, audience) !== null)
       .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt));
   },
 

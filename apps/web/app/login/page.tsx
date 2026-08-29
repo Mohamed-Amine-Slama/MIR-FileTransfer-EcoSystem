@@ -117,10 +117,18 @@ export default function LoginPage(): React.JSX.Element {
             failure. Someone who cannot sign in is on this screen, not hunting
             through a footer. */}
         <div className="mt-4 flex flex-wrap justify-between gap-3 border-t pt-4 text-sm">
-          <Link href="/reset-password" className="font-semibold text-primary hover:underline">
+          <Link
+            href="/reset-password"
+            data-testid="forgot-password"
+            className="font-semibold text-primary hover:underline"
+          >
             {t.resetForgot}
           </Link>
-          <Link href="/signup/provider" className="font-semibold text-primary hover:underline">
+          <Link
+            href="/signup/provider"
+            data-testid="signup-link"
+            className="font-semibold text-primary hover:underline"
+          >
             {t.navSignUp}
           </Link>
         </div>

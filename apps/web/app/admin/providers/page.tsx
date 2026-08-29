@@ -221,36 +221,36 @@ function AdminProviders(): React.JSX.Element {
         {matching.length === 0 ? (
           <EmptyState testId="directory-empty">{t.casesNoMatch}</EmptyState>
         ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t.colProvider}</TableHead>
-              <TableHead>{t.colKind}</TableHead>
-              <TableHead>{t.signUpSide}</TableHead>
-              <TableHead>{t.colSeats}</TableHead>
-              <TableHead>{t.colVerification}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {matching.map((provider) => (
-              <TableRow key={provider.id}>
-                <TableCell className="font-medium">{provider.legalName}</TableCell>
-                <TableCell className="text-muted-foreground">
-                  {providerKindLabel(t, provider.kind)}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {sideLabel(t, provider.side)}
-                </TableCell>
-                <TableCell>{provider.seatCount}</TableCell>
-                <TableCell>
-                  <Badge tone={verificationTone(provider.verification.status)}>
-                    {verificationLabel(t, provider.verification.status)}
-                  </Badge>
-                </TableCell>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t.colProvider}</TableHead>
+                <TableHead>{t.colKind}</TableHead>
+                <TableHead>{t.signUpSide}</TableHead>
+                <TableHead>{t.colSeats}</TableHead>
+                <TableHead>{t.colVerification}</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {matching.map((provider) => (
+                <TableRow key={provider.id}>
+                  <TableCell className="font-medium">{provider.legalName}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {providerKindLabel(t, provider.kind)}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {sideLabel(t, provider.side)}
+                  </TableCell>
+                  <TableCell>{provider.seatCount}</TableCell>
+                  <TableCell>
+                    <Badge tone={verificationTone(provider.verification.status)}>
+                      {verificationLabel(t, provider.verification.status)}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </Card>
     </Main>
