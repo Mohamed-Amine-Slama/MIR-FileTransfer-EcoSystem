@@ -62,14 +62,36 @@ their SCCs are signed. `identity_doctor_profiles.verified_at` is the gate.
 | All P3.2 RLS tests green in CI | ✅ | 21 tests; run in CI on every commit against real PostgreSQL |
 | Cross-doctor and cross-patient isolation verified end-to-end | ✅ | `patients.e2e.test.ts` — through HTTP, 404 not 403 |
 | Consent revocation immediately removes access | ✅ | `consent.test.ts` — access disappears on next query |
-| MFA enforced on all clinical accounts | ⚠️ **partial** | API guard verified by test; **Keycloak flow not bound or exercised** |
+| MFA enforced on all clinical accounts | 🏠 **local** | API guard verified by test; Keycloak conditional-MFA flow now bound and **exercised in a real browser** — a doctor with no TOTP lands on `CONFIGURE_TOTP` and receives no code; a patient completes login unprompted. Local Keycloak only |
 | No standing production data access for engineers | 🔒 open | P14.1 — no production exists |
 
-**MFA caveat.** `AuthGuard` independently rejects a clinical-role token showing
-no second factor, and that is tested. But the Keycloak conditional-MFA flow has
-not been bound or behaviourally verified — `infra/keycloak/configure-mfa.sh`
-documents what a human must check. It fails closed (doctors locked out rather
-than let in), but it is unverified.
+**MFA — what was actually wrong, and what is now proven.**
+
+`configure-mfa.sh` did not work. It created `conditional-user-role` executions
+and never set their role config, used a non-subflow provider for the
+conditional subflow, and never bound the flow. The result enforced **nothing**.
+It went unnoticed because `AuthGuard` independently rejects a clinical-role
+token showing no second factor, so the misconfiguration failed *closed* —
+doctors locked out rather than let in.
+
+Rewritten against the admin REST API, idempotent, and now verified
+behaviourally by `pnpm verify:mfa`, which drives a real browser through the
+login page (conditional MFA lives in the browser flow; a direct-grant request
+would bypass it and prove nothing):
+
+- a `libya_doctor` with no TOTP lands on
+  `login-actions/required-action?execution=CONFIGURE_TOTP`, and the callback
+  receives **no authorization code**;
+- a `patient` completes login and is never prompted.
+
+**The probe was proven by negative control:** rebinding the realm to the stock
+`browser` flow made the doctor complete login and receive a code, and the probe
+failed 3 checks. A green run therefore means something.
+
+**Still `local`, not verified:** this is the compose Keycloak. The deployed
+realm is a different artifact and the same check must be run against it. The
+script also refuses to report a pass if the dev-only hardcoded `amr` mapper is
+present, since that would make every token claim a second factor.
 
 ---
 
