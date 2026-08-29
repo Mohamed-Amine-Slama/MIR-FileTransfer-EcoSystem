@@ -5,9 +5,14 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { DirectionProvider } from '@radix-ui/react-direction';
 import {
+  Banknote,
+  Bell,
+  Briefcase,
+  Building2,
   CalendarDays,
   ChevronDown,
   Clock,
+  FolderKanban,
   Inbox,
   LogOut,
   Menu,
@@ -19,10 +24,12 @@ import {
 } from 'lucide-react';
 import type { Role } from '@mir/contracts';
 import { UI_LOCALE_DIRECTION, uiLocaleSchema } from '@mir/contracts';
+import { rolesForSides } from '../lib/corridor/registry';
 import { LOCALE_NAMES } from '../lib/i18n/dictionary';
 import { useLocale, useT } from '../lib/i18n/provider';
 import { useSession } from '../lib/session/session';
 import { cn } from '../lib/utils';
+import { SessionTimeoutNotice } from './SessionTimeoutNotice';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,6 +63,10 @@ interface NavItem {
   Icon: typeof Users;
 }
 
+const PROVIDER_SIDE_ROLES = rolesForSides(['source', 'destination']);
+const OPS_ROLES = rolesForSides(['ops']);
+const NOTIFIED_ROLES = rolesForSides(['source', 'destination', 'ops']);
+
 /** The brand mark: two panes handing off — a transfer, which is what MIR is. */
 function BrandMark(): React.JSX.Element {
   return (
@@ -78,7 +89,12 @@ export function AppShell({ children }: { children: ReactNode }): React.JSX.Eleme
     setMenuOpen(false);
   }, [pathname]);
 
+  // The case layer's entries are gated by CORRIDOR SIDE rather than by role
+  // name (§4.3): "whoever the referring side is" survives a new corridor,
+  // where a role literal would have to be edited here.
   const items: NavItem[] = [
+    { href: '/workspace', label: t.navWorkspace, roles: PROVIDER_SIDE_ROLES, Icon: Briefcase },
+    { href: '/cases', label: t.navCases, roles: PROVIDER_SIDE_ROLES, Icon: FolderKanban },
     { href: '/patients', label: t.navPatients, roles: ['libya_doctor'], Icon: Users },
     { href: '/upload', label: t.navUpload, roles: ['libya_doctor'], Icon: Upload },
     {
@@ -90,6 +106,16 @@ export function AppShell({ children }: { children: ReactNode }): React.JSX.Eleme
     { href: '/consent', label: t.navConsents, roles: ['patient'], Icon: ShieldCheck },
     { href: '/doctor', label: t.navInbox, roles: ['tunisia_doctor'], Icon: Inbox },
     { href: '/doctor/availability', label: t.navAvailability, roles: ['tunisia_doctor'], Icon: Clock },
+    { href: '/ledger', label: t.navLedger, roles: PROVIDER_SIDE_ROLES, Icon: Banknote },
+    {
+      href: '/notifications',
+      label: t.navNotifications,
+      roles: NOTIFIED_ROLES,
+      Icon: Bell,
+    },
+    { href: '/admin/cases', label: t.navAdminCases, roles: OPS_ROLES, Icon: FolderKanban },
+    { href: '/admin/providers', label: t.navAdminProviders, roles: OPS_ROLES, Icon: Building2 },
+    { href: '/admin/ledger', label: t.navAdminLedger, roles: OPS_ROLES, Icon: Banknote },
     { href: '/admin/audit', label: t.navAudit, roles: ['admin'], Icon: ScrollText },
   ];
 
@@ -234,6 +260,11 @@ export function AppShell({ children }: { children: ReactNode }): React.JSX.Eleme
             </div>
           </div>
         </header>
+
+        {/* Above the content, not over it: §4.4 asks for the timeout to be
+            visible, and a banner that pushes the page down is noticed without
+            covering the study someone is reading. */}
+        <SessionTimeoutNotice />
 
         <div id="main-content" tabIndex={-1} className="flex-1 outline-none">
           {children}

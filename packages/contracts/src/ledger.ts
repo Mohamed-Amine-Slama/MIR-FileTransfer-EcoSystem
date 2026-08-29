@@ -26,6 +26,30 @@ export const moneySchema = z.object({
 });
 export type Money = z.infer<typeof moneySchema>;
 
+/**
+ * How many minor units make one major unit, per ISO 4217.
+ *
+ * NOT a constant 100. The dinar currencies of this corridor — TND and LYD —
+ * have an exponent of 3, so dividing every amount by 100 would overstate every
+ * dinar figure tenfold on the ledger of the very providers the platform bills.
+ * Declaring it as a total Record means adding a currency to the enum without
+ * stating its exponent is a compile error.
+ */
+export const CURRENCY_MINOR_UNITS: Record<CurrencyCode, number> = {
+  USD: 2,
+  EUR: 2,
+  TND: 3,
+  LYD: 3,
+};
+
+/**
+ * Minor units to major units. The single place the exponent is applied, so a
+ * screen, a CSV export, and a total cannot disagree about what 25000 means.
+ */
+export function toMajorUnits(money: Money): number {
+  return money.amountMinor / 10 ** CURRENCY_MINOR_UNITS[money.currency];
+}
+
 export const PAYMENT_STATUSES = ['paid', 'pending', 'overdue'] as const;
 export const paymentStatusSchema = z.enum(PAYMENT_STATUSES);
 export type PaymentStatus = z.infer<typeof paymentStatusSchema>;

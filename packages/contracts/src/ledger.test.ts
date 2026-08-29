@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { type LedgerEntry, ledgerEntrySchema, summariseLedger } from './ledger';
+import {
+  CURRENCY_MINOR_UNITS,
+  currencySchema,
+  ledgerEntrySchema,
+  summariseLedger,
+  toMajorUnits,
+  type LedgerEntry,
+} from './ledger';
 
 const entries: LedgerEntry[] = [
   ledgerEntrySchema.parse({
@@ -120,5 +127,28 @@ describe('summariseLedger', () => {
     expect(summary.coordinationFees).toEqual({});
     expect(summary.subscriptions).toEqual({});
     expect(summary.outstanding.coordination_fee).toBe(0);
+  });
+});
+
+describe('minor units are per-currency (§5.7 multi-currency)', () => {
+  it('knows the Tunisian and Libyan dinar are three-decimal currencies', () => {
+    // ISO 4217 gives TND and LYD an exponent of 3. Assuming 2 everywhere —
+    // the usual shortcut — misreports every dinar amount by a factor of ten,
+    // and these are the corridor's own local currencies.
+    expect(CURRENCY_MINOR_UNITS.TND).toBe(3);
+    expect(CURRENCY_MINOR_UNITS.LYD).toBe(3);
+    expect(CURRENCY_MINOR_UNITS.USD).toBe(2);
+    expect(CURRENCY_MINOR_UNITS.EUR).toBe(2);
+  });
+
+  it('converts minor units to major units using the currency exponent', () => {
+    expect(toMajorUnits({ amountMinor: 25000, currency: 'USD' })).toBe(250);
+    expect(toMajorUnits({ amountMinor: 25000, currency: 'TND' })).toBe(25);
+  });
+
+  it('covers every currency in the enum, so a new one cannot be forgotten', () => {
+    for (const currency of currencySchema.options) {
+      expect(CURRENCY_MINOR_UNITS[currency]).toBeGreaterThan(0);
+    }
   });
 });

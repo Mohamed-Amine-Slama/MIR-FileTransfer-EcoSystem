@@ -57,7 +57,14 @@ function CasesList(): React.JSX.Element {
   const [cases, setCases] = useState<Case[] | null>(null);
   const [status, setStatus] = useState<CaseStatus | ''>('');
   const [search, setSearch] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // An inverted range returns nothing, which reads as "no cases" rather than
+  // as a typo. Saying so is the difference between the clinic fixing the
+  // filter and the clinic phoning us about missing cases.
+  const invalidRange = from !== '' && to !== '' && from > to;
 
   const load = useCallback(async () => {
     if (providerId === null) return;
@@ -68,13 +75,15 @@ function CasesList(): React.JSX.Element {
           providerId,
           ...(status === '' ? {} : { status }),
           ...(search.trim() === '' ? {} : { search: search.trim() }),
+          ...(from === '' ? {} : { updatedFrom: from }),
+          ...(to === '' ? {} : { updatedTo: to }),
         }),
       );
     } catch {
       setError(t.genericError);
       setCases([]);
     }
-  }, [providerId, status, search, t]);
+  }, [providerId, status, search, from, to, t]);
 
   useEffect(() => {
     void load();
@@ -88,7 +97,7 @@ function CasesList(): React.JSX.Element {
     );
   }
 
-  const filtered = search.trim() !== '' || status !== '';
+  const filtered = search.trim() !== '' || status !== '' || from !== '' || to !== '';
 
   return (
     <Main>
@@ -105,7 +114,13 @@ function CasesList(): React.JSX.Element {
 
       {error !== null && <Alert tone="danger">{error}</Alert>}
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2">
+      {invalidRange && (
+        <Alert tone="warning" testId="invalid-range">
+          {t.casesFilterInvalidRange}
+        </Alert>
+      )}
+
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Field label={t.casesFilterStatus}>
           <Select
             value={status}
@@ -126,6 +141,26 @@ function CasesList(): React.JSX.Element {
             data-testid="search-ref"
             placeholder="MIR-2026-0417"
             onChange={(e) => setSearch(e.target.value)}
+          />
+        </Field>
+        {/* §5.3 P1 completes the filter set: status, date, reference. Dates are
+            native inputs so the clinic gets their own locale's date picker. */}
+        <Field label={t.casesFilterFrom}>
+          <Input
+            type="date"
+            value={from}
+            data-testid="filter-from"
+            invalid={invalidRange}
+            onChange={(e) => setFrom(e.target.value)}
+          />
+        </Field>
+        <Field label={t.casesFilterTo}>
+          <Input
+            type="date"
+            value={to}
+            data-testid="filter-to"
+            invalid={invalidRange}
+            onChange={(e) => setTo(e.target.value)}
           />
         </Field>
       </div>

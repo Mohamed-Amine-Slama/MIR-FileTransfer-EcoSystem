@@ -1,7 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { FolderUp } from 'lucide-react';
+import { validateMedicalFile, type FileRejectionKey } from '@mir/contracts';
 import { api, type Patient } from '../../lib/api/endpoints';
 import { createUploadApi } from '../../lib/upload/api-client';
 import { queueDb, type QueuedFile } from '../../lib/upload/queue-db';
@@ -9,6 +12,7 @@ import { Uploader } from '../../lib/upload/uploader';
 import { useT } from '../../lib/i18n/provider';
 import type { Dictionary } from '../../lib/i18n/dictionary';
 import { RoleGate } from '../../components/RoleGate';
+import { fileRejectionLabel } from '../../components/case/labels';
 import {
   Alert,
   Badge,
@@ -36,13 +40,27 @@ import {
 export default function UploadPage() {
   return (
     <RoleGate allow={['libya_doctor']}>
-      <UploadScreen />
+      {/* useSearchParams needs a Suspense boundary to keep the route static. */}
+      <Suspense fallback={null}>
+        <UploadScreen />
+      </Suspense>
     </RoleGate>
   );
 }
 
+/** One file the picker returned but the upload will not accept (§5.2 P0). */
+interface RejectedFile {
+  name: string;
+  reason: FileRejectionKey;
+}
+
 function UploadScreen() {
   const t = useT();
+  // §5.4 P0: files belong to a case. The reference arrives on the query string
+  // from the case screen, and is shown so the doctor can see which case they
+  // are uploading into before selecting a gigabyte of imaging.
+  const caseRef = useSearchParams().get('case');
+  const [rejected, setRejected] = useState<RejectedFile[]>([]);
   const [files, setFiles] = useState<QueuedFile[]>([]);
   const [resumeCount, setResumeCount] = useState<number | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -94,10 +112,27 @@ function UploadScreen() {
       const selected = Array.from(event.target.files ?? []);
       if (selected.length === 0 || patientId === '') return;
 
+      // §5.2 P0: validated BEFORE a session is created and before a single
+      // byte leaves the clinic. A folder from a CD routinely contains
+      // AUTORUN.INF and a bundled viewer .exe alongside the study; those are
+      // dropped here rather than uploaded and refused one at a time.
+      const problems: RejectedFile[] = [];
+      const accepted: File[] = [];
+      for (const file of selected) {
+        const reason = validateMedicalFile({ name: file.name, sizeBytes: file.size });
+        if (reason === null) {
+          accepted.push(file);
+        } else {
+          problems.push({ name: file.name, reason });
+        }
+      }
+      setRejected(problems);
+      if (accepted.length === 0) return;
+
       const uploadApi = createUploadApi();
-      const { sessionId } = await uploadApi.createSession(patientId, selected.length);
+      const { sessionId } = await uploadApi.createSession(patientId, accepted.length);
       const uploader = getUploader();
-      await uploader.enqueueFiles(sessionId, patientId, selected);
+      await uploader.enqueueFiles(sessionId, patientId, accepted);
       void uploader.start();
     },
     [getUploader, patientId],
@@ -110,7 +145,34 @@ function UploadScreen() {
 
   return (
     <Main wide>
-      <PageHeader title={t.uploadTitle} description={t.uploadHint} />
+      <PageHeader
+        title={t.uploadTitle}
+        description={t.uploadHint}
+        actions={
+          caseRef === null ? undefined : (
+            <Link
+              href={`/cases/${caseRef}`}
+              className="text-sm font-semibold text-primary hover:underline"
+            >
+              {t.uploadForCase} <bdi className="font-mono">{caseRef}</bdi>
+            </Link>
+          )
+        }
+      />
+
+      {rejected.length > 0 && (
+        <Alert tone="warning" testId="rejected-files">
+          <p className="font-semibold">{t.fileRejectedTitle}</p>
+          <ul className="mt-1 space-y-0.5">
+            {rejected.map((file) => (
+              <li key={file.name} className="break-all">
+                <bdi className="font-mono text-xs">{file.name}</bdi> —{' '}
+                {fileRejectionLabel(t, file.reason)}
+              </li>
+            ))}
+          </ul>
+        </Alert>
+      )}
 
       {resumeCount !== null && (
         <div data-testid="resume-notice">

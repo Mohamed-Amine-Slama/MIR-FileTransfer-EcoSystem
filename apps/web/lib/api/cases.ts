@@ -1,7 +1,10 @@
 import type {
   Case,
+  CaseAudience,
   CaseEvent,
+  CaseSide,
   CaseStatus,
+  FileAccessEvent,
   LedgerEntry,
   Message,
   Notification,
@@ -22,6 +25,16 @@ export interface ListCasesQuery {
   status?: CaseStatus;
   /** Matches on case reference — the §5.3 provider search. */
   search?: string;
+  /**
+   * Inclusive date bounds on the case's last update, as YYYY-MM-DD — §5.3 P1
+   * ("by status, date, reference number").
+   *
+   * A DATE and not an instant: a clinic filters by the day something happened,
+   * and comparing against a timestamp would silently exclude everything that
+   * happened later on the closing day.
+   */
+  updatedFrom?: string;
+  updatedTo?: string;
 }
 
 export interface SubmitCaseInput {
@@ -51,8 +64,22 @@ export interface CaseDraft {
 
 export interface CasesApi {
   listCases(query: ListCasesQuery): Promise<Case[]>;
-  getCase(ref: string): Promise<Case | null>;
-  listCaseEvents(ref: string): Promise<CaseEvent[]>;
+  /**
+   * Returns null both for "no such case" and for "not yours" — §5.4 P0.
+   *
+   * The two are deliberately indistinguishable to the caller. A distinct
+   * "exists but forbidden" answer would confirm that a guessed reference is
+   * real, which is a disclosure in itself on references as short as
+   * MIR-2026-0417.
+   */
+  getCase(ref: string, audience: CaseAudience): Promise<Case | null>;
+  listCaseEvents(ref: string, audience: CaseAudience): Promise<CaseEvent[]>;
+  /**
+   * Who opened which file and when — §5.4 P1 and §4.4's requirement that
+   * audit-relevant actions be surfaced back to the user. Scoped like every
+   * other case read: the trail is as sensitive as the file it describes.
+   */
+  listFileAccess(ref: string, audience: CaseAudience): Promise<FileAccessEvent[]>;
   submitCase(input: SubmitCaseInput): Promise<Case>;
   /** §5.8 ops intervention. Rejects an illegal transition rather than coercing it. */
   changeCaseStatus(ref: string, to: CaseStatus, actorDisplayName: string): Promise<Case>;
@@ -60,10 +87,25 @@ export interface CasesApi {
   listLedger(providerId: string): Promise<LedgerEntry[]>;
   listAllLedger(): Promise<{ providerId: string; entries: LedgerEntry[] }[]>;
 
-  listMessages(ref: string): Promise<Message[]>;
-  sendMessage(ref: string, body: string, authorDisplayName: string): Promise<Message>;
+  listMessages(ref: string, audience: CaseAudience): Promise<Message[]>;
+  /**
+   * The author's SIDE is a parameter, not something the implementation
+   * assumes. A thread whose whole job is telling the two clinics apart cannot
+   * have the sender's identity inferred by the layer writing the row.
+   */
+  sendMessage(
+    ref: string,
+    body: string,
+    authorDisplayName: string,
+    authorSide: CaseSide,
+  ): Promise<Message>;
 
-  listNotifications(): Promise<Notification[]>;
+  /**
+   * Scoped like every other case read. A notification names a case reference,
+   * so an unscoped list would leak which cases exist to whoever asked — the
+   * same disclosure `getCase` is careful to avoid, arriving by a side door.
+   */
+  listNotifications(audience: CaseAudience): Promise<Notification[]>;
   markNotificationRead(id: string): Promise<void>;
 
   getProvider(id: string): Promise<Provider | null>;

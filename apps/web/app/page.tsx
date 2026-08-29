@@ -2,11 +2,24 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { CalendarDays, Inbox, ScrollText, ShieldCheck, Upload, UserRoundPlus, Users } from 'lucide-react';
+import {
+  Banknote,
+  Briefcase,
+  Building2,
+  CalendarDays,
+  FolderKanban,
+  Inbox,
+  ScrollText,
+  ShieldCheck,
+  Upload,
+  UserRoundPlus,
+  Users,
+} from 'lucide-react';
 import type { Role } from '@mir/contracts';
 import { api, type Appointment, type AuditEvent } from '../lib/api/endpoints';
 import { useDateFormat, useT } from '../lib/i18n/provider';
 import type { Dictionary } from '../lib/i18n/dictionary';
+import { sideForRole } from '../lib/corridor/registry';
 import { useSession } from '../lib/session/session';
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge';
 import {
@@ -338,7 +351,13 @@ type DestinationKey =
   | 'consents'
   | 'inbox'
   | 'availability'
-  | 'audit';
+  | 'audit'
+  | 'workspace'
+  | 'cases'
+  | 'ledger'
+  | 'adminCases'
+  | 'adminProviders'
+  | 'adminLedger';
 
 const DESTINATION_ICONS: Record<DestinationKey, typeof Users> = {
   patients: Users,
@@ -348,7 +367,40 @@ const DESTINATION_ICONS: Record<DestinationKey, typeof Users> = {
   inbox: Inbox,
   availability: UserRoundPlus,
   audit: ScrollText,
+  workspace: Briefcase,
+  cases: FolderKanban,
+  ledger: Banknote,
+  adminCases: FolderKanban,
+  adminProviders: Building2,
+  adminLedger: Banknote,
 };
+
+/**
+ * The case-layer destinations, chosen by corridor SIDE rather than by role
+ * name (§4.3).
+ *
+ * Kept separate from `destinationsFor` below on purpose: that switch is V0's,
+ * it branches on role literals, and it is on the §4.3 debt allowlist. Adding
+ * corridor-aware entries to it would deepen the debt rather than work around
+ * it. This function names no country and no role, so it stays correct when a
+ * second corridor is configured.
+ */
+function corridorDestinationsFor(role: Role): { key: DestinationKey; href: string }[] {
+  const side = sideForRole(role);
+  if (side === null) return [];
+  if (side === 'ops') {
+    return [
+      { key: 'adminCases', href: '/admin/cases' },
+      { key: 'adminProviders', href: '/admin/providers' },
+      { key: 'adminLedger', href: '/admin/ledger' },
+    ];
+  }
+  return [
+    { key: 'workspace', href: '/workspace' },
+    { key: 'cases', href: '/cases' },
+    { key: 'ledger', href: '/ledger' },
+  ];
+}
 
 function destinationsFor(role: Role): { key: DestinationKey; href: string }[] {
   switch (role) {
@@ -381,6 +433,12 @@ function label(key: DestinationKey, t: Dictionary): string {
     consents: t.navConsents,
     inbox: t.navInbox,
     availability: t.navAvailability,
+    workspace: t.navWorkspace,
+    cases: t.navCases,
+    ledger: t.navLedger,
+    adminCases: t.navAdminCases,
+    adminProviders: t.navAdminProviders,
+    adminLedger: t.navAdminLedger,
     audit: t.navAudit,
   };
   return map[key];
@@ -395,6 +453,12 @@ function description(key: DestinationKey, t: Dictionary): string {
     inbox: t.inboxTitle,
     availability: t.availabilityDescription,
     audit: t.auditDescription,
+    workspace: t.workspaceDescription,
+    cases: t.casesDescription,
+    ledger: t.ledgerDescription,
+    adminCases: t.adminCasesDescription,
+    adminProviders: t.adminProvidersDescription,
+    adminLedger: t.adminLedgerDescription,
   };
   return map[key];
 }
@@ -407,7 +471,9 @@ function QuickActions({ role }: { role: Role }): React.JSX.Element {
         {t.dashboardQuickActions}
       </h2>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="home-actions">
-        {destinationsFor(role).map((d) => {
+        {/* Corridor destinations first: a provider's day starts with their
+            caseload, not with the patient index. */}
+        {[...corridorDestinationsFor(role), ...destinationsFor(role)].map((d) => {
           const Icon = DESTINATION_ICONS[d.key];
           return (
             <Link

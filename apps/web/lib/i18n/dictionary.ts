@@ -409,6 +409,27 @@ const ar = {
   colKind: 'النوع',
   colVerification: 'التحقق',
   colSeats: 'المستخدمون',
+
+  // file validation and access trail (§5.2, §5.4, §4.4)
+  fileTypeNotAllowed: 'نوع الملف غير مقبول. المقبول: DICOM أو PDF أو صورة.',
+  fileTooLarge: 'حجم الملف يتجاوز الحد المسموح به.',
+  fileEmpty: 'الملف فارغ.',
+  fileRejectedTitle: 'ملفات لم يتم قبولها',
+  accessUploaded: 'تم الرفع',
+  accessViewed: 'تمت المعاينة',
+  accessDownloaded: 'تم التنزيل',
+  accessReplaced: 'تم الاستبدال',
+  caseFileNeverAccessed: 'لم يُفتح بعد',
+  casesFilterFrom: 'من تاريخ',
+  casesFilterTo: 'إلى تاريخ',
+  casesFilterInvalidRange: 'تاريخ البداية بعد تاريخ النهاية.',
+  uploadForCase: 'الرفع للحالة',
+  uploadNoCase: 'لم تُحدَّد حالة. اختر حالة أولاً.',
+  sessionExpiringTitle: 'ستنتهي الجلسة قريباً',
+  sessionExpiringBody: 'ستُغلق الجلسة تلقائياً لحماية بيانات المرضى. مدِّد الجلسة للمتابعة.',
+  sessionExtend: 'تمديد الجلسة',
+  sessionRemaining: 'الوقت المتبقي',
+  sessionExpired: 'انتهت الجلسة. سجّل الدخول من جديد.',
 } as const;
 
 export type Dictionary = { readonly [K in keyof typeof ar]: string };
@@ -793,6 +814,28 @@ const fr: Dictionary = {
   colKind: 'Type',
   colVerification: 'Vérification',
   colSeats: 'Utilisateurs',
+
+  // file validation and access trail (§5.2, §5.4, §4.4)
+  fileTypeNotAllowed: 'Type de fichier non accepté. Formats admis : DICOM, PDF ou image.',
+  fileTooLarge: 'Le fichier dépasse la taille maximale autorisée.',
+  fileEmpty: 'Le fichier est vide.',
+  fileRejectedTitle: 'Fichiers non acceptés',
+  accessUploaded: 'Déposé',
+  accessViewed: 'Consulté',
+  accessDownloaded: 'Téléchargé',
+  accessReplaced: 'Remplacé',
+  caseFileNeverAccessed: 'Jamais ouvert',
+  casesFilterFrom: 'À partir du',
+  casesFilterTo: "Jusqu'au",
+  casesFilterInvalidRange: 'La date de début est postérieure à la date de fin.',
+  uploadForCase: 'Dépôt pour le dossier',
+  uploadNoCase: "Aucun dossier sélectionné. Choisissez d'abord un dossier.",
+  sessionExpiringTitle: 'Votre session va expirer',
+  sessionExpiringBody:
+    'La session se fermera automatiquement pour protéger les données patients. Prolongez-la pour continuer.',
+  sessionExtend: 'Prolonger la session',
+  sessionRemaining: 'Temps restant',
+  sessionExpired: 'Session expirée. Veuillez vous reconnecter.',
 };
 
 /**
@@ -1198,6 +1241,28 @@ const en: Dictionary = {
   colKind: 'Type',
   colVerification: 'Verification',
   colSeats: 'Users',
+
+  // file validation and access trail (§5.2, §5.4, §4.4)
+  fileTypeNotAllowed: 'File type not accepted. Allowed: DICOM, PDF, or an image.',
+  fileTooLarge: 'The file is larger than the maximum allowed size.',
+  fileEmpty: 'The file is empty.',
+  fileRejectedTitle: 'Files that were not accepted',
+  accessUploaded: 'Uploaded',
+  accessViewed: 'Viewed',
+  accessDownloaded: 'Downloaded',
+  accessReplaced: 'Replaced',
+  caseFileNeverAccessed: 'Not opened yet',
+  casesFilterFrom: 'From',
+  casesFilterTo: 'To',
+  casesFilterInvalidRange: 'The start date is after the end date.',
+  uploadForCase: 'Upload for case',
+  uploadNoCase: 'No case selected. Choose a case first.',
+  sessionExpiringTitle: 'Your session is about to expire',
+  sessionExpiringBody:
+    'The session will close automatically to protect patient data. Extend it to continue.',
+  sessionExtend: 'Extend session',
+  sessionRemaining: 'Time remaining',
+  sessionExpired: 'Session expired. Please sign in again.',
 };
 
 export const DICTIONARIES: Record<UiLocale, Dictionary> = { ar, fr, en };

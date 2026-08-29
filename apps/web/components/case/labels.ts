@@ -1,4 +1,15 @@
-import type { CaseSide, CaseStatus, PaymentStatus, ProviderKind, VerificationStatus } from '@mir/contracts';
+import {
+  isTerminalStatus,
+  toMajorUnits,
+  type CaseSide,
+  type CaseStatus,
+  type FileAccessAction,
+  type FileRejectionKey,
+  type Money,
+  type PaymentStatus,
+  type ProviderKind,
+  type VerificationStatus,
+} from '@mir/contracts';
 import type { Dictionary } from '../../lib/i18n/dictionary';
 
 /**
@@ -105,36 +116,144 @@ export function paymentStatusTone(status: PaymentStatus): Tone {
  * different things of the two parties: while the referring clinic is uploading
  * imaging, the receiving clinic is waiting, and telling both "upload the
  * imaging" would be worse than saying nothing.
+ *
+ * WHY A KEY AND NOT A STRING. The workspace (§5.5) has to decide which cases
+ * are waiting on the viewer. Deriving that by comparing a rendered label
+ * against the rendered word for "nothing" would make a clinic's task list
+ * depend on translated copy — a French string that happened to match, or a
+ * reworded Arabic entry, would silently change which cases appear as work.
+ * The decision is made on this enum instead, and the label is a projection of
+ * it. `isAwaitingSide` and `nextActionLabel` therefore cannot disagree.
  */
-export function nextActionLabel(t: Dictionary, status: CaseStatus, side: CaseSide): string {
+export type NextActionKey =
+  | 'uploadFiles'
+  | 'awaitReview'
+  | 'awaitMatch'
+  | 'schedule'
+  | 'none';
+
+export function nextActionKey(status: CaseStatus, side: CaseSide): NextActionKey {
   if (side === 'ops') {
-    return status === 'submitted' ? t.nextActionAwaitReview : t.nextActionNone;
+    // Ops is not a party to the case. The one thing waiting on them is a
+    // newly submitted case nobody has triaged.
+    return status === 'submitted' ? 'awaitReview' : 'none';
   }
   if (side === 'source') {
-    const bySource: Record<CaseStatus, string> = {
-      submitted: t.nextActionUploadFiles,
-      under_review: t.nextActionAwaitReview,
-      matched: t.nextActionAwaitMatch,
-      in_progress: t.nextActionNone,
-      completed: t.nextActionNone,
-      rejected: t.nextActionNone,
-      cancelled: t.nextActionNone,
+    const bySource: Record<CaseStatus, NextActionKey> = {
+      submitted: 'uploadFiles',
+      under_review: 'awaitReview',
+      matched: 'awaitMatch',
+      in_progress: 'none',
+      completed: 'none',
+      rejected: 'none',
+      cancelled: 'none',
     };
     return bySource[status];
   }
-  const byDestination: Record<CaseStatus, string> = {
-    submitted: t.nextActionNone,
-    under_review: t.nextActionNone,
-    matched: t.nextActionSchedule,
-    in_progress: t.nextActionSchedule,
-    completed: t.nextActionNone,
-    rejected: t.nextActionNone,
-    cancelled: t.nextActionNone,
+  const byDestination: Record<CaseStatus, NextActionKey> = {
+    submitted: 'none',
+    under_review: 'none',
+    matched: 'schedule',
+    in_progress: 'schedule',
+    completed: 'none',
+    rejected: 'none',
+    cancelled: 'none',
   };
   return byDestination[status];
 }
 
-/** Minor units to a localised amount. Never floats until the final format. */
-export function formatMoney(locale: string, amountMinor: number, currency: string): string {
-  return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(amountMinor / 100);
+export function nextActionLabel(t: Dictionary, status: CaseStatus, side: CaseSide): string {
+  const labels: Record<NextActionKey, string> = {
+    uploadFiles: t.nextActionUploadFiles,
+    awaitReview: t.nextActionAwaitReview,
+    awaitMatch: t.nextActionAwaitMatch,
+    schedule: t.nextActionSchedule,
+    none: t.nextActionNone,
+  };
+  return labels[nextActionKey(status, side)];
+}
+
+/**
+ * Whether this case is waiting on the given side — the §5.5 task rule.
+ *
+ * A terminal case is never a task even if a table above still names an action,
+ * so a cancelled case cannot linger on a clinic's to-do list.
+ */
+export function isAwaitingSide(status: CaseStatus, side: CaseSide): boolean {
+  if (isTerminalStatus(status)) return false;
+  return nextActionKey(status, side) !== 'none';
+}
+
+/**
+ * Minor units to a localised amount. Never floats until the final format.
+ *
+ * Takes a `Money` rather than a loose number-and-string pair so the exponent
+ * cannot be applied by hand at a call site: TND and LYD are three-decimal
+ * currencies, and `amountMinor / 100` is wrong for both.
+ */
+export function formatMoney(locale: string, money: Money): string {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: money.currency }).format(
+    toMajorUnits(money),
+  );
+}
+
+/**
+ * The dictionary keys a verification may be rejected with — brief §5.1.
+ *
+ * A rejection reason travels as a KEY and never as prose, so an Arabic-speaking
+ * applicant is not shown an English sentence typed by an ops reviewer. This
+ * list is the set an admin may choose from, and `verificationReasonLabel`
+ * resolves one for display.
+ */
+export const REJECTION_REASON_KEYS = [
+  'verificationReasonLicenceExpired',
+  'verificationReasonDocumentsUnclear',
+  'verificationReasonNotRecognised',
+] as const;
+export type RejectionReasonKey = (typeof REJECTION_REASON_KEYS)[number];
+
+export function isRejectionReasonKey(key: string): key is RejectionReasonKey {
+  return (REJECTION_REASON_KEYS as readonly string[]).includes(key);
+}
+
+/**
+ * Returns null for an unrecognised key rather than echoing it. A raw key like
+ * `verificationReasonFoo` on screen would tell an applicant nothing; the caller
+ * renders the generic rejection copy instead.
+ */
+export function verificationReasonLabel(t: Dictionary, key: string | undefined): string | null {
+  if (key === undefined || !isRejectionReasonKey(key)) return null;
+  const labels: Record<RejectionReasonKey, string> = {
+    verificationReasonLicenceExpired: t.verificationReasonLicenceExpired,
+    verificationReasonDocumentsUnclear: t.verificationReasonDocumentsUnclear,
+    verificationReasonNotRecognised: t.verificationReasonNotRecognised,
+  };
+  return labels[key];
+}
+
+export function fileAccessActionLabel(t: Dictionary, action: FileAccessAction): string {
+  const labels: Record<FileAccessAction, string> = {
+    uploaded: t.accessUploaded,
+    viewed: t.accessViewed,
+    downloaded: t.accessDownloaded,
+    replaced: t.accessReplaced,
+  };
+  return labels[action];
+}
+
+/**
+ * The §4.4 line: "last accessed by Dr. X on [date]".
+ *
+ * Assembled here rather than in JSX so the ORDER of the three parts is a
+ * translation concern and not a layout one — Arabic and French put the actor
+ * and the verb in different places, and a template built out of JSX fragments
+ * cannot be reordered by a translator.
+ */
+export function fileRejectionLabel(t: Dictionary, key: FileRejectionKey): string {
+  const labels: Record<FileRejectionKey, string> = {
+    fileTypeNotAllowed: t.fileTypeNotAllowed,
+    fileTooLarge: t.fileTooLarge,
+    fileEmpty: t.fileEmpty,
+  };
+  return labels[key];
 }
