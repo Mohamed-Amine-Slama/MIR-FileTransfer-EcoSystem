@@ -102,7 +102,7 @@ present, since that would make every token claim a second factor.
 | Object Lock verified — originals cannot be deleted | 🔒 **open** | Terraform written (compliance mode). **The delete-rejection probe has never been run.** This is the spec's single most important infra gate |
 | Cross-region replication verified | 🔒 open | Configured, never applied |
 | Checksums verified end-to-end on upload | ✅ | `upload.test.ts` — SHA-256 over decoded original; corrupt chunk rejected |
-| PITR restore drill completed within target RTO | 🔒 open | `docs/runbooks/dr.md` — **RTO/RPO unmeasured** |
+| PITR restore drill completed within target RTO | 🔒 open / 🏠 local | Managed RDS PITR **unmeasured** (no account). A **local** basebackup restore was executed 2026-08-29: RTO 123.2 s, 18/18 instances still mapped to the right patient and checksum, RLS and the booking exclusion constraint survived. Not the RDS figure — see `dr.md` |
 | No lossy transcoding anywhere in the pipeline | ✅ | Byte-for-byte equality asserted; Orthanc `IngestTranscoding` omitted; lossy syntaxes flagged not converted |
 
 ---

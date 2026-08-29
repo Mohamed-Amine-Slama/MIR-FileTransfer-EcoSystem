@@ -58,7 +58,7 @@ const GATES = [
   ['P14.2', 'Vulnerable dependency blocks build', 'verified', 'planted minimist@1.2.5, audit went red by advisory id, tree restored'],
   ['P14.3', 'Edge protection, headers grade A', 'partial', 'CSP+headers set and asserted on both apps; Cloudflare WAF/ratelimit unconfigured'],
   ['P14.4', 'Pen test, high/critical remediated', 'blocked', 'not commissioned - BLOCKS LAUNCH'],
-  ['P15.1', 'Backup restore drill', 'open', 'runbook written, not exercised'],
+  ['P15.1', 'Backup restore drill', 'local', 'basebackup->scratch restore run: RTO 123s, FK+RLS+exclusion+18/18 manifest verified; not RDS PITR'],
   ['P15.2', 'Region failure drill', 'open', 'runbook written, not exercised'],
   ['P15.3', 'Incident response tabletop', 'open', 'runbook written, not exercised'],
 ];

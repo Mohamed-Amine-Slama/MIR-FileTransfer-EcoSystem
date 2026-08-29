@@ -17,6 +17,7 @@
     "boundaries:verify": "node scripts/verify-boundary-enforcement.mjs",
     "scan:verify": "node scripts/verify-dependency-scanning.mjs",
     "verify:mfa": "node scripts/verify-keycloak-mfa.mjs",
+    "drill:restore": "node scripts/drill-restore.mjs",
     "boundaries:graph": "depcruise --config .dependency-cruiser.cjs --output-type dot apps/api/src",
     "check:synthetic": "node test-data/check-synthetic.mjs",
     "gen:fixtures": "node test-data/generate-fixtures.mjs",
