@@ -104,6 +104,20 @@ than let in), but it is unverified.
 | Dependency scanning enforced in CI | ✅ | `pnpm scan:verify` plants minimist@1.2.5 (GHSA-xvch-5gv4-984h), asserts audit goes red **by advisory id**, restores the tree byte-for-byte |
 | Log scrubbing verified with real sensitive payloads | ✅ | 16 tests; patient name + JWT stripped from logs and Sentry payloads. One **documented limitation** below |
 | Audit log immutability verified | ✅ | UPDATE and DELETE both denied to `mir_app`; row survives both |
+| Security headers set and asserted | ⚠️ **partial** | CSP, HSTS, Permissions-Policy, COOP/CORP on both apps, asserted by directive in 6 API + 3 browser tests. **`script-src 'unsafe-inline'` remains** — see below. Cloudflare WAF/rate limiting/bot protection unconfigured |
+
+**CSP limitation, stated plainly:** `script-src` carries `'unsafe-inline'`.
+Next's App Router streams RSC payloads through inline `<script>` tags, and
+without it the application does not hydrate at all — verified, not assumed: the
+e2e suite fails 44 of 52 with the tightened policy. The correct fix is a
+per-request nonce; it was implemented and **does not work here**, because Next
+stamps nonces only onto dynamically rendered pages and these routes are
+statically prerendered. Adopting it means forcing dynamic rendering app-wide —
+an architecture decision, not a config tweak. What bounds the exposure
+meanwhile: the app contains no `dangerouslySetInnerHTML`, no `innerHTML`
+assignment, no `eval` and no `new Function`, and that claim is enforced by a
+test (`apps/web/lib/security/xss-surface.test.ts`) rather than left in a
+comment.
 
 **Log-scrubbing limitation, stated plainly:** a patient name appearing *only*
 in free text, with no accompanying field to learn it from, is **not** scrubbed.

@@ -105,6 +105,18 @@ resource "aws_db_instance" "this" {
   performance_insights_kms_key_id       = var.kms_key_arn_database
   performance_insights_retention_period = 7
 
+  # Enhanced monitoring samples at the OS level, which Performance Insights
+  # does not: during an incident the question "was the box starved of IO or was
+  # a query pathological" is answerable only with both.
+  monitoring_interval = 60
+  monitoring_role_arn = aws_iam_role.rds_monitoring.arn
+
+  # IAM database authentication, in addition to the Secrets Manager password.
+  # The application connects as mir_app with a password (ADR-6); this exists so
+  # a human performing break-glass access (P14.1) can authenticate with a
+  # short-lived IAM token instead of retrieving a long-lived credential.
+  iam_database_authentication_enabled = true
+
   enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
 
   auto_minor_version_upgrade = true
@@ -121,4 +133,28 @@ resource "aws_db_instance" "this" {
     Name      = "mir-${var.environment}"
     DataClass = "patient-data"
   })
+}
+
+# --- enhanced monitoring role ------------------------------------------------
+# RDS assumes this to publish OS metrics. Scoped to the RDS monitoring service
+# and nothing else.
+data "aws_iam_policy_document" "rds_monitoring_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["monitoring.rds.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "rds_monitoring" {
+  name               = "mir-${var.environment}-rds-monitoring"
+  assume_role_policy = data.aws_iam_policy_document.rds_monitoring_assume.json
+  tags               = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "rds_monitoring" {
+  role       = aws_iam_role.rds_monitoring.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
 }
