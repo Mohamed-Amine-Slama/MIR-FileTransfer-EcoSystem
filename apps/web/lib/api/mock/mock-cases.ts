@@ -1,13 +1,17 @@
 import {
   canTransition,
+  canViewCase,
   caseEventSchema,
   caseSchema,
   formatCaseRef,
   messageSchema,
   providerSchema,
   type Case,
+  type CaseAudience,
   type CaseEvent,
+  type CaseSide,
   type CaseStatus,
+  type FileAccessEvent,
   type LedgerEntry,
   type Message,
   type Notification,
@@ -22,6 +26,7 @@ import type {
 import {
   FIXTURE_CASES,
   FIXTURE_EVENTS,
+  FIXTURE_FILE_ACCESS,
   FIXTURE_LEDGER,
   FIXTURE_MESSAGES,
   FIXTURE_NOTIFICATIONS,
@@ -51,9 +56,39 @@ const events: CaseEvent[] = [...FIXTURE_EVENTS];
 const messages: Message[] = [...FIXTURE_MESSAGES];
 const notifications: Notification[] = [...FIXTURE_NOTIFICATIONS];
 const providers: Provider[] = [...FIXTURE_PROVIDERS];
+const fileAccess: FileAccessEvent[] = [...FIXTURE_FILE_ACCESS];
 
+/**
+ * The provider filter mirrors what RLS will enforce, and it is the CONTRACT's
+ * predicate rather than a second copy of the rule — a mock that is more
+ * permissive than the database teaches screens to rely on rows they will never
+ * receive in production.
+ */
 function visibleTo(item: Case, providerId: string): boolean {
-  return item.submittedByProviderId === providerId || item.matchedProviderId === providerId;
+  return canViewCase(item, { kind: 'provider', providerId });
+}
+
+/** Resolves a case only if the asker is entitled to it (§5.4 P0). */
+function findVisible(ref: string, audience: CaseAudience): Case | null {
+  const found = cases.find((c) => c.ref === ref);
+  if (found === undefined) return null;
+  return canViewCase(found, audience) ? found : null;
+}
+
+/**
+ * Inclusive day-boundary comparison for the §5.3 date filter.
+ *
+ * Compares the DATE PART as a string. `2026-08-06T11:30:00Z` and the bound
+ * `2026-08-06` compare equal, so a case updated in the afternoon is included
+ * by a filter that ends on its own day — which is what "up to the 6th" means
+ * to the person typing it, and what a naive `Date.parse(bound)` comparison
+ * against midnight would get wrong.
+ */
+function withinDates(timestamp: string, from?: string, to?: string): boolean {
+  const day = timestamp.slice(0, 10);
+  if (from !== undefined && from !== '' && day < from) return false;
+  if (to !== undefined && to !== '' && day > to) return false;
+  return true;
 }
 
 /** Next free sequence for the current year, so references never collide. */
@@ -80,18 +115,29 @@ export const mockCasesApi: CasesApi = {
         (query.status === undefined || c.status === query.status) &&
         (query.search === undefined ||
           query.search === '' ||
-          c.ref.toLowerCase().includes(query.search.toLowerCase())),
+          c.ref.toLowerCase().includes(query.search.toLowerCase())) &&
+        withinDates(c.updatedAt, query.updatedFrom, query.updatedTo),
     );
   },
 
-  async getCase(ref: string): Promise<Case | null> {
-    return cases.find((c) => c.ref === ref) ?? null;
+  async getCase(ref: string, audience: CaseAudience): Promise<Case | null> {
+    return findVisible(ref, audience);
   },
 
-  async listCaseEvents(ref: string): Promise<CaseEvent[]> {
+  async listCaseEvents(ref: string, audience: CaseAudience): Promise<CaseEvent[]> {
+    // Gated on the case, not on the events: a timeline is as sensitive as the
+    // case it describes, and leaking one is leaking the other.
+    if (findVisible(ref, audience) === null) return [];
     return events
       .filter((e) => e.caseRef === ref)
       .sort((a, b) => Date.parse(a.occurredAt) - Date.parse(b.occurredAt));
+  },
+
+  async listFileAccess(ref: string, audience: CaseAudience): Promise<FileAccessEvent[]> {
+    if (findVisible(ref, audience) === null) return [];
+    return fileAccess
+      .filter((e) => e.caseRef === ref)
+      .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt));
   },
 
   async submitCase(input: SubmitCaseInput): Promise<Case> {
@@ -159,18 +205,24 @@ export const mockCasesApi: CasesApi = {
     }));
   },
 
-  async listMessages(ref: string): Promise<Message[]> {
+  async listMessages(ref: string, audience: CaseAudience): Promise<Message[]> {
+    if (findVisible(ref, audience) === null) return [];
     return messages
       .filter((m) => m.caseRef === ref)
       .sort((a, b) => Date.parse(a.sentAt) - Date.parse(b.sentAt));
   },
 
-  async sendMessage(ref: string, body: string, authorDisplayName: string): Promise<Message> {
+  async sendMessage(
+    ref: string,
+    body: string,
+    authorDisplayName: string,
+    authorSide: CaseSide,
+  ): Promise<Message> {
     const now = new Date().toISOString();
     const created = messageSchema.parse({
       id: `msg-${messages.length + 1}`,
       caseRef: ref,
-      authorSide: 'source',
+      authorSide,
       authorDisplayName,
       body,
       sentAt: now,

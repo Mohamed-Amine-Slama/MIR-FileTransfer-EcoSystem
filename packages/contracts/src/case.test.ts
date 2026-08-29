@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CASE_STATUSES,
   canTransition,
+  canViewCase,
   caseSchema,
   formatCaseRef,
   isTerminalStatus,
@@ -135,5 +136,44 @@ describe('case', () => {
         intake: {},
       }),
     ).toThrow();
+  });
+});
+
+describe('case audience (§5.4 P0, §4.4)', () => {
+  const item = caseSchema.parse({
+    ref: 'MIR-2026-0417',
+    corridorId: 'ly-tn',
+    status: 'in_progress',
+    submittedByProviderId: 'prov-a',
+    matchedProviderId: 'prov-b',
+    patientId: 'pat-1',
+    studyIds: ['study-1'],
+    createdAt: '2026-08-01T09:00:00.000Z',
+    updatedAt: '2026-08-06T11:30:00.000Z',
+    intake: {},
+  });
+
+  it('lets the referring provider see their own case', () => {
+    expect(canViewCase(item, { kind: 'provider', providerId: 'prov-a' })).toBe(true);
+  });
+
+  it('lets the matched provider see the case they were matched to', () => {
+    expect(canViewCase(item, { kind: 'provider', providerId: 'prov-b' })).toBe(true);
+  });
+
+  it('refuses a provider who is not a party, however they reached the URL', () => {
+    // §5.4 P0: only authorised parties for a given case see its files. A case
+    // reference is short and guessable, so knowing one must not grant access.
+    expect(canViewCase(item, { kind: 'provider', providerId: 'prov-c' })).toBe(false);
+  });
+
+  it('lets ops see any case, because that is what oversight means (§5.8)', () => {
+    expect(canViewCase(item, { kind: 'ops' })).toBe(true);
+  });
+
+  it('does not treat an unmatched case as visible to everyone', () => {
+    const unmatched = caseSchema.parse({ ...item, matchedProviderId: undefined });
+    expect(canViewCase(unmatched, { kind: 'provider', providerId: 'prov-b' })).toBe(false);
+    expect(canViewCase(unmatched, { kind: 'provider', providerId: 'prov-a' })).toBe(true);
   });
 });

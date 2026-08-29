@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { CaseSide, Provider, Role } from '@mir/contracts';
+import type { CaseAudience, CaseSide, Provider, Role } from '@mir/contracts';
 import { casesApi } from '../api/mock';
 import { sideForRole } from '../corridor/registry';
 import { useSession } from '../session/session';
@@ -65,4 +65,24 @@ export function useCurrentProvider(): CurrentProvider {
   }, [providerId]);
 
   return { loading, providerId, provider, side };
+}
+
+/**
+ * What to pass to the case API as "who is asking" — brief §5.4 P0.
+ *
+ * Derived from the corridor SIDE, so ops is the only viewer that gets the
+ * unrestricted audience and it is reached by being ops rather than by an
+ * absent argument. Returns null while the session is still resolving: a
+ * screen must wait rather than guess, because guessing here means guessing in
+ * the direction of showing someone else's case.
+ */
+export function audienceFor(side: CaseSide | null, providerId: string | null): CaseAudience | null {
+  if (side === 'ops') return { kind: 'ops' };
+  if (providerId === null) return null;
+  return { kind: 'provider', providerId };
+}
+
+export function useCaseAudience(): { audience: CaseAudience | null; loading: boolean } {
+  const { side, providerId, loading } = useCurrentProvider();
+  return { audience: audienceFor(side, providerId), loading };
 }

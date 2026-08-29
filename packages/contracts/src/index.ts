@@ -5,3 +5,4 @@ export * from './case';
 export * from './provider';
 export * from './ledger';
 export * from './messaging';
+export * from './files';

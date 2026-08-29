@@ -1,12 +1,14 @@
 import {
   caseEventSchema,
   caseSchema,
+  fileAccessEventSchema,
   ledgerEntrySchema,
   messageSchema,
   notificationSchema,
   providerSchema,
   type Case,
   type CaseEvent,
+  type FileAccessEvent,
   type LedgerEntry,
   type Message,
   type Notification,
@@ -213,5 +215,42 @@ export const FIXTURE_NOTIFICATIONS: readonly Notification[] = [
     occurredAt: '2026-08-06T11:30:00.000Z',
     titleKey: 'notifCaseStatusChanged',
     readAt: '2026-08-06T12:00:00.000Z',
+  }),
+];
+
+/**
+ * §5.4 P1: the access trail behind "last accessed by Dr. X on [date]".
+ *
+ * Deliberately includes an access by the RECEIVING clinic to a study the
+ * referring clinic uploaded, because that is the reassurance the trail exists
+ * to give: the films arrived and somebody actually opened them.
+ */
+export const FIXTURE_FILE_ACCESS: readonly FileAccessEvent[] = [
+  fileAccessEventSchema.parse({
+    id: 'fa-1',
+    caseRef: 'MIR-2026-0417',
+    studyId: 'study-fixture-1',
+    actorDisplayName: 'Dr. Amal Ben Salah',
+    actorSide: 'source',
+    action: 'uploaded',
+    occurredAt: '2026-08-04T11:28:00.000Z',
+  }),
+  fileAccessEventSchema.parse({
+    id: 'fa-2',
+    caseRef: 'MIR-2026-0417',
+    studyId: 'study-fixture-1',
+    actorDisplayName: 'Dr. Youssef Trabelsi',
+    actorSide: 'destination',
+    action: 'viewed',
+    occurredAt: '2026-08-04T12:05:00.000Z',
+  }),
+  fileAccessEventSchema.parse({
+    id: 'fa-3',
+    caseRef: 'MIR-2026-0402',
+    studyId: 'study-fixture-2',
+    actorDisplayName: 'Dr. Youssef Trabelsi',
+    actorSide: 'destination',
+    action: 'downloaded',
+    occurredAt: '2026-07-28T09:15:00.000Z',
   }),
 ];

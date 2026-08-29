@@ -140,3 +140,36 @@ export const caseSchema = z.object({
   intake: z.record(z.string(), z.unknown()),
 });
 export type Case = z.infer<typeof caseSchema>;
+
+/**
+ * Who is asking to see a case — brief §5.4 P0 and §4.4.
+ *
+ * WHY A UNION AND NOT AN OPTIONAL PROVIDER ID. The obvious signature is
+ * `getCase(ref, providerId?)`, where omitting the id means ops. That makes
+ * unrestricted access the DEFAULT, reachable by forgetting an argument, on the
+ * call that returns a patient's imaging. Here every caller must state which
+ * kind of viewer it is, and `{ kind: 'ops' }` is a thing you have to type on
+ * purpose.
+ *
+ * This is a UI-side gate. RLS refuses the rows regardless (ADR-6); the point
+ * of duplicating the rule here is §4.4's "a user should never see a UI
+ * affordance for an action their role isn't authorized for" — not to be the
+ * control that stops them.
+ */
+export type CaseAudience =
+  | { kind: 'provider'; providerId: string }
+  | { kind: 'ops' };
+
+/**
+ * The two parties to a case are the one that submitted it and the one it was
+ * matched to. An unmatched case therefore has exactly one party — a provider
+ * who might LATER be matched has no claim on it yet, and a case reference is
+ * short enough to guess.
+ */
+export function canViewCase(item: Case, audience: CaseAudience): boolean {
+  if (audience.kind === 'ops') return true;
+  return (
+    item.submittedByProviderId === audience.providerId ||
+    item.matchedProviderId === audience.providerId
+  );
+}

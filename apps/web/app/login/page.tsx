@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { KeyRound, LogIn } from 'lucide-react';
@@ -111,6 +112,18 @@ export default function LoginPage(): React.JSX.Element {
             {t.navSignIn}
           </Button>
         </form>
+
+        {/* §5.1: recovery and registration are reachable from the point of
+            failure. Someone who cannot sign in is on this screen, not hunting
+            through a footer. */}
+        <div className="mt-4 flex flex-wrap justify-between gap-3 border-t pt-4 text-sm">
+          <Link href="/reset-password" className="font-semibold text-primary hover:underline">
+            {t.resetForgot}
+          </Link>
+          <Link href="/signup/provider" className="font-semibold text-primary hover:underline">
+            {t.navSignUp}
+          </Link>
+        </div>
       </Card>
 
       {/* The OIDC redirect — the production path (P4.1): credentials typed on
