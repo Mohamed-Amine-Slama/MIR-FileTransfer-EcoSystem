@@ -293,7 +293,6 @@ export class OtlpSpanExporter implements SpanExporter {
       // request into a second error in the logs.
       this.failures += 1;
       if (this.failures === 1) {
-        // eslint-disable-next-line no-console -- telemetry sink is unavailable
         console.warn(`[tracing] OTLP export failed; suppressing further warnings`);
       }
     });

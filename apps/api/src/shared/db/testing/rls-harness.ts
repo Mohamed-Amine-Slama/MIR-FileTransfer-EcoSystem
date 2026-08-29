@@ -125,7 +125,10 @@ const SETUP_LOCK_KEY = 8_147_221_930;
  */
 async function reapAbandonedTestDatabases(admin: Client): Promise<void> {
   const { rows } = await admin.query<{ datname: string }>(
-    `SELECT datname FROM pg_database WHERE datname LIKE 'mir\_test\_%' ESCAPE '\'`,
+    // Doubled backslashes: a template literal collapses `\_` to `_`, which
+    // would send Postgres an EMPTY escape clause and turn the underscores into
+    // wildcards — a broader match than intended.
+    `SELECT datname FROM pg_database WHERE datname LIKE 'mir\\_test\\_%' ESCAPE '\\'`,
   );
 
   for (const { datname } of rows) {
