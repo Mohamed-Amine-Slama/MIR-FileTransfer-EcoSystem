@@ -55,7 +55,7 @@ const GATES = [
   ['P12', 'No clinical data in notifications', 'verified', 'type-level + render-time + vocabulary scan'],
   ['P13', 'Log scrubbing + tracing', 'verified', 'one documented limitation; no collector wired'],
   ['P14.1', 'No standing production access', 'blocked', 'no production'],
-  ['P14.2', 'Vulnerable dependency blocks build', 'partial', 'job added; not demonstrated red'],
+  ['P14.2', 'Vulnerable dependency blocks build', 'verified', 'planted minimist@1.2.5, audit went red by advisory id, tree restored'],
   ['P14.3', 'Edge protection, headers grade A', 'open', 'Cloudflare not configured'],
   ['P14.4', 'Pen test, high/critical remediated', 'blocked', 'not commissioned - BLOCKS LAUNCH'],
   ['P15.1', 'Backup restore drill', 'open', 'runbook written, not exercised'],

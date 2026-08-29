@@ -101,7 +101,7 @@ than let in), but it is unverified.
 |---|---|---|
 | Pen test complete, high/critical remediated | 🔒 **open** | Not commissioned. **Spec: do not onboard real patients before this** |
 | Secret scanning enforced in CI | ✅ | gitleaks; proven to catch planted AWS/GitHub/Orthanc credentials |
-| Dependency scanning enforced in CI | ⚠️ partial | Job added (`pnpm audit` + Trivy, fail on high/critical). **Not yet demonstrated red** with a deliberately vulnerable dependency |
+| Dependency scanning enforced in CI | ✅ | `pnpm scan:verify` plants minimist@1.2.5 (GHSA-xvch-5gv4-984h), asserts audit goes red **by advisory id**, restores the tree byte-for-byte |
 | Log scrubbing verified with real sensitive payloads | ✅ | 16 tests; patient name + JWT stripped from logs and Sentry payloads. One **documented limitation** below |
 | Audit log immutability verified | ✅ | UPDATE and DELETE both denied to `mir_app`; row survives both |
 
