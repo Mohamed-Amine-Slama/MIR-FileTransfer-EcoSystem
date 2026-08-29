@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { raw } from 'express';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { loadConfig } from './shared/config/config.schema';
@@ -32,6 +33,19 @@ async function bootstrap(): Promise<void> {
     // through the JSON body parser.
     bodyParser: true,
   });
+
+  // P7.2 — chunk uploads arrive as raw application/octet-stream and must reach
+  // the handler as a Buffer, not a parsed body.
+  //
+  // Scoped to the chunk route prefix rather than applied globally: handing
+  // every endpoint an unparsed body would break the JSON controllers. The
+  // limit is headroom over UPLOAD_CHUNK_SIZE_BYTES (5 MiB default, 64 MiB
+  // ceiling per the config schema) — it bounds a single request, while the
+  // declared-size check in UploadService bounds the file.
+  app.use(
+    '/uploads/files',
+    raw({ type: 'application/octet-stream', limit: '80mb' }),
+  );
 
   // BUILD_SPEC §6: errors must not leak internals. Nest's default 500 body is
   // already opaque; the global exception filter added in P4.2 enforces the
