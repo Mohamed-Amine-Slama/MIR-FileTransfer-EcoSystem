@@ -65,10 +65,31 @@ const GATES = [
 
 const LEGAL = ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7', 'L8'];
 
-const counts = { verified: 0, partial: 0, open: 0, blocked: 0 };
+const counts = { verified: 0, local: 0, partial: 0, open: 0, blocked: 0 };
 for (const [, , status] of GATES) counts[status]++;
 
-const mark = { verified: 'OK  ', partial: 'PART', open: 'OPEN', blocked: 'BLKD' };
+/**
+ * `local` — executed and observed against a LOCAL STAND-IN, not the deployed
+ * target.
+ *
+ * It is not `verified`: a local Keycloak realm and a deployed one are
+ * different artifacts, and a single-node database restore is not managed PITR.
+ * It is not `partial` either — that bucket means "unfinished", and putting
+ * executed, observed verification there hides it among work nobody has
+ * started, which is the confusion this ledger exists to prevent.
+ *
+ * A `local` gate MUST name its stand-in in the note. If it cannot say what
+ * stood in for what, it is not `local`.
+ *
+ * `local` never counts toward launchability.
+ */
+const mark = {
+  verified: 'OK  ',
+  local: 'LOCL',
+  partial: 'PART',
+  open: 'OPEN',
+  blocked: 'BLKD',
+};
 
 console.log('\nBUILD_SPEC gate status\n' + '='.repeat(78));
 for (const [phase, gate, status, note] of GATES) {
@@ -79,9 +100,23 @@ for (const [phase, gate, status, note] of GATES) {
 
 console.log('='.repeat(78));
 console.log(
-  `verified ${counts.verified}   partial ${counts.partial}   ` +
-    `open ${counts.open}   blocked ${counts.blocked}   (of ${GATES.length})`,
+  `verified ${counts.verified}   local ${counts.local}   ` +
+    `partial ${counts.partial}   open ${counts.open}   ` +
+    `blocked ${counts.blocked}   (of ${GATES.length})`,
 );
+
+// The table above is maintained by hand. If a row carries a status that is not
+// one of the five, it would be counted nowhere and the summary would quietly
+// understate what is open — the exact failure this file exists to prevent.
+const summed =
+  counts.verified + counts.local + counts.partial + counts.open + counts.blocked;
+if (summed !== GATES.length) {
+  console.error(
+    `\nLEDGER ERROR: statuses sum to ${summed} but there are ${GATES.length} gates.` +
+      `\nA gate has an unrecognised status.`,
+  );
+  process.exit(1);
+}
 console.log(`\nBLOCKING LEGAL: ${LEGAL.join(' ')} — none answered.`);
 console.log('\nNOT LAUNCHABLE. See docs/pre-launch-checklist.md.');
 console.log('The blockers are legal and infrastructural, not code.\n');

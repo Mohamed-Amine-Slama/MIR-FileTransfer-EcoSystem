@@ -9,6 +9,10 @@ patient."
 
 - ✅ **Verified** — a test or command was run and its output observed. The
   evidence column says which.
+- 🏠 **Local** — the verification was executed and its output observed, but
+  against a **local stand-in** rather than the deployed target. Real evidence,
+  and not a substitute for the real environment. Never counts toward launch.
+  The note always names what stood in for what.
 - ⬜ **Open** — not done. No partial credit.
 - 🔒 **Blocked** — cannot be done from this repository; needs credentials, a
   third party, or a legal answer.
