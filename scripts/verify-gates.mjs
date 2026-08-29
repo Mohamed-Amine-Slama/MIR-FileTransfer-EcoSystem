@@ -41,7 +41,7 @@ const GATES = [
   ['P5.3', 'Consent evidence + revocation', 'verified', 'text reconstructible; DB-enforced immutability'],
   ['P6.1', 'DICOM validation vs fixtures', 'verified', 'all 7 fixtures'],
   ['P7.1', 'Cross-doctor upload blocked', 'verified', 'real HTTP 404 through the controller; no session row'],
-  ['P7.2', 'Interrupted upload resumes', 'partial', 'resume proven; no physically severed link'],
+  ['P7.2', 'Interrupted upload resumes', 'verified', 'TCP RST mid-transfer via proxy; resumed, checksum matched, 5 consecutive runs'],
   ['P7.3', 'Queue survives browser kill', 'verified', 'persistent profile, real close'],
   ['P7.4', 'Study integrity under retry', 'verified', '120 files, idempotent, byte-exact'],
   ['P8.1', 'Orthanc private + functional', 'partial', 'local: auth + DICOMweb verified; VPC isolation not'],
