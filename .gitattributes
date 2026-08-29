@@ -1,0 +1,26 @@
+# Text files are normalised to LF in the repository regardless of platform.
+#
+# This repo lives on a Windows drive under OneDrive. Without this, every
+# checkout rewrites line endings and every `git status` shows dozens of files
+# as modified with symmetric CRLF-only diffs, which buries real changes.
+* text=auto eol=lf
+
+# The fixture corpus is BINARY and must never be normalised.
+#
+# `test-data/dicom/05-not-dicom/actually-a-png.dcm` was committed with the \r
+# stripped from INSIDE its PNG magic bytes (89 50 4E 47 0A 1A 0A, where a PNG
+# signature is 89 50 4E 47 0D 0A 1A 0A), because the file is mostly ASCII and
+# git's text heuristic classified it as text.
+#
+# The 28 real .dcm binaries survived only because they contain NUL bytes and
+# the heuristic guessed right. Nothing enforced that. A byte-mangled DICOM
+# fixture is an ADR-4 violation inside the test corpus, and it would be
+# invisible: the fixtures exist to be rejected, so a corrupt one still passes.
+test-data/** binary
+
+# Lockfile: text, but a line-by-line diff of 277k lines is never useful.
+pnpm-lock.yaml -diff
+
+# Shell scripts must keep LF. A CRLF shebang line fails to execute in a
+# container with `bad interpreter: /usr/bin/env bash^M`.
+*.sh text eol=lf
