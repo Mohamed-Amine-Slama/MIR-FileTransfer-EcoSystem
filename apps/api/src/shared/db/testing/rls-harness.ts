@@ -99,6 +99,60 @@ export interface HarnessOptions {
 const SETUP_LOCK_KEY = 8_147_221_930;
 
 /**
+ * Drop test databases whose owning process is gone.
+ *
+ * Test databases are named `mir_test_<pid>_<worker>` and deliberately OUTLIVE
+ * the run: files in one worker share a database, so dropping at teardown would
+ * force a CREATE DATABASE and a full migration for every test file.
+ *
+ * The cost of never dropping them is not zero, though. They accumulate — 160
+ * of them after a couple of afternoons — and on a slow filesystem the cluster
+ * gets slow enough that an unrelated test times out. That surfaced once as the
+ * P10.2 booking-concurrency gate failing at 30 s, which reads as "the
+ * double-booking guarantee broke" and is nothing of the sort. A gate that
+ * fails for a reason unrelated to what it tests is worse than no gate.
+ *
+ * So: reap the ones whose creating process no longer exists.
+ *
+ * Deliberately NOT `pnpm db:clean`, which drops every mir_test_* database and
+ * terminates its backends. That is correct as a manual command and unsafe as
+ * an automatic one — two concurrent runs would destroy each other, which is
+ * exactly how this problem was first noticed.
+ *
+ * `process.kill(pid, 0)` sends no signal; it only asks whether the pid is
+ * addressable. A recycled pid makes this skip a database that could have been
+ * dropped, which is the safe direction to be wrong in.
+ */
+async function reapAbandonedTestDatabases(admin: Client): Promise<void> {
+  const { rows } = await admin.query<{ datname: string }>(
+    `SELECT datname FROM pg_database WHERE datname LIKE 'mir\_test\_%' ESCAPE '\'`,
+  );
+
+  for (const { datname } of rows) {
+    const pid = Number(datname.split('_')[2]);
+    if (!Number.isInteger(pid) || pid <= 0) continue;
+    if (pid === process.pid) continue;
+
+    try {
+      process.kill(pid, 0);
+      continue; // owner still running — leave it alone
+    } catch (err) {
+      // EPERM means the process exists but belongs to another user. Still
+      // alive, so still not ours to drop.
+      if ((err as NodeJS.ErrnoException).code === 'EPERM') continue;
+    }
+
+    try {
+      await admin.query(`DROP DATABASE IF EXISTS ${JSON.stringify(datname).replace(/"/g, '"')}`);
+    } catch {
+      // A database in use by a connection we cannot see, or dropped by another
+      // worker between the SELECT and here. Neither is worth failing setup
+      // over: this is housekeeping, not a test assertion.
+    }
+  }
+}
+
+/**
  * Create (or recreate) the test database, apply migrations, and give the
  * application role a login for the duration of the test run.
  */
@@ -128,6 +182,8 @@ export async function setupTestDatabase(options: HarnessOptions = {}): Promise<H
   const owner = await (async (): Promise<Pool> => {
     await admin.query('SELECT pg_advisory_lock($1)', [SETUP_LOCK_KEY]);
     try {
+      await reapAbandonedTestDatabases(admin);
+
       const exists = await admin.query('SELECT 1 FROM pg_database WHERE datname = $1', [TEST_DB]);
       if (exists.rowCount === 0) {
         // Identifier cannot be parameterised; TEST_DB is not user input.
