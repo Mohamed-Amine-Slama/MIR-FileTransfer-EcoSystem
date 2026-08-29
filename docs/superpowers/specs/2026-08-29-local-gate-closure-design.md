@@ -26,6 +26,9 @@ refuses to close the ones that cannot.
 ## Non-goals
 
 - Making the application launchable. It is not, and nothing here changes that.
+- Building features. The one exception is the missing upload HTTP transport
+  (§3, P7.0), which is not a feature so much as the absent half of a phase the
+  ledger already claims as verified.
 - Closing any P2 infrastructure gate. Terraform stays unapplied.
 - Answering L1–L8, or deciding anything L1–L8 depends on.
 - Marking a gate verified on the strength of a local stand-in.
@@ -123,11 +126,56 @@ The planted dependency is chosen for a stable, long-published advisory, and the
 script asserts on the advisory identifier rather than a CVSS score, which can
 be rescored.
 
+### P7.0 — the upload transport does not exist
+
+**Discovered while planning; it changes this section.**
+
+`apps/web/lib/upload/api-client.ts` calls four endpoints:
+
+```
+POST /uploads
+POST /uploads/:sessionId/files
+PUT  /uploads/files/:fileId/chunks/:chunkIndex
+POST /uploads/files/:fileId/complete
+```
+
+None are implemented. There is no `@Controller('uploads')` in the API, and
+`imaging.module.ts:17` registers only `DicomWebController` and
+`StudiesController`. `UploadService` is a provider that nothing exposes.
+
+The web app therefore cannot upload against the real API. PHASE 7 — the phase
+the spec calls *"⚠️ highest practical risk… this phase determines whether the
+product is usable"* — has a client and a service with no wire between them.
+
+Both test layers substitute the missing piece, which is why it stayed
+invisible: `upload.test.ts` calls `uploads.createSession(...)` in-process, and
+`upload-resume.spec.ts` stubs the API with `page.route()` and its own
+`StubServer`. Each is a sound test of what it covers. Neither crosses the gap.
+
+**One ledger entry is consequently wrong.** P7.1 is recorded `verified` for the
+gate *"creating a session for another doctor's patient → 404"*. Its test is
+named `"blocks a session for ANOTHER doctor's patient, as 404 (the P7.1 gate)"`
+and asserts `rejects.toThrow(/not found/i)` — a service exception message.
+Nothing returns 404 because nothing returns HTTP. The authorization behaviour
+underneath is real and correctly tested; the gate's stated assertion is not the
+one being made.
+
+Build the controller: four routes over the existing service, each with a
+`@RequiresRole` declaration (P1.5 refuses to boot without one), and a raw
+`application/octet-stream` body path for the chunk `PUT` that bypasses the JSON
+parser. Error mapping needs no work — `UploadService` already throws
+`NotFoundException` and `BadRequestException`, so 404-not-403 (§6) falls out
+once a transport exists.
+
+Then re-verify P7.1 as the gate actually words it: a real HTTP 404, asserted
+against the response status.
+
 ### P7.2 — a genuinely severed connection
 
 The gate says: *"Do not proceed until you have tested with the network actually
-severed mid-upload."* The current test aborts a `fetch`. An aborted fetch is a
-clean client-initiated teardown; a dropped link is not. The difference is
+severed mid-upload."* The current test aborts a `fetch` — and does so against an
+in-process service call, not a socket. An aborted fetch is a clean
+client-initiated teardown; a dropped link is not. The difference is
 exactly the class of bug this gate exists to find — half-written chunks, a
 server holding a connection open, a resume offset computed from a request that
 the server considered complete and the client did not.
@@ -325,6 +373,10 @@ assertion test, the severed-connection test.
 | open | 4 | 1 | `−P14.3` `−P15.1` `−P15.3` |
 | blocked | 9 | 9 | unchanged |
 | **total** | **47** | **47** | |
+
+P7.1 does not move — it is `verified` before and after — but it is `verified`
+truthfully only after the transport exists and its 404 is asserted over HTTP.
+The count is unchanged; the claim behind it stops being wrong.
 
 Remaining after: `partial` = P1.3, P4.5, P8.1, P14.3. `open` = P15.2 (region
 failure drill — needs a second region, so it is arguably blocked; left `open`
