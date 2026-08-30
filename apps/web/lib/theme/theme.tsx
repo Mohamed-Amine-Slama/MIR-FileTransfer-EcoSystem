@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -38,6 +39,17 @@ interface ThemeContextValue {
   /** What `system` currently resolves to. Null until the effect has run. */
   resolved: 'light' | 'dark' | null;
   setTheme: (next: Theme) => void;
+  /**
+   * Apply a theme stored on the account, but only if this browser has no
+   * choice of its own.
+   *
+   * The precedence matters. A device-local choice is the more recent, more
+   * deliberate act: someone who switched to dark on this laptop meant this
+   * laptop, and having the server overwrite it on every sign-in would make the
+   * toggle feel broken. So the account value is a DEFAULT for a device that has
+   * not been told otherwise — a new machine, a fresh profile — and nothing more.
+   */
+  adoptAccountDefault: (theme: Theme) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -75,10 +87,17 @@ function writeStored(theme: Theme): void {
 export function ThemeProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const [theme, setThemeState] = useState<Theme>(DEFAULT_THEME);
   const [systemDark, setSystemDark] = useState<boolean | null>(null);
+  // Whether THIS browser holds an explicit choice, which decides whether an
+  // account-level default may be applied. Kept in a ref rather than state: it
+  // gates an effect and must not cause a render of its own.
+  const hasLocalChoice = useRef(false);
 
   useEffect(() => {
     const stored = readStored();
-    if (stored !== null) setThemeState(stored);
+    if (stored !== null) {
+      hasLocalChoice.current = true;
+      setThemeState(stored);
+    }
 
     // Tracked so a user on "system" sees the page follow the OS switching at
     // sunset, rather than only at the next reload.
@@ -94,15 +113,24 @@ export function ThemeProvider({ children }: { children: ReactNode }): React.JSX.
   }, [theme]);
 
   const setTheme = useCallback((next: Theme) => {
+    hasLocalChoice.current = true;
     setThemeState(next);
+    writeStored(next);
+  }, []);
+
+  const adoptAccountDefault = useCallback((next: Theme) => {
+    if (hasLocalChoice.current) return;
+    setThemeState(next);
+    // Written locally too, so the next load applies it before paint rather
+    // than flashing the default while the session resolves.
     writeStored(next);
   }, []);
 
   const value = useMemo<ThemeContextValue>(() => {
     const resolved =
       theme === 'system' ? (systemDark === null ? null : systemDark ? 'dark' : 'light') : theme;
-    return { theme, resolved, setTheme };
-  }, [theme, systemDark, setTheme]);
+    return { theme, resolved, setTheme, adoptAccountDefault };
+  }, [theme, systemDark, setTheme, adoptAccountDefault]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

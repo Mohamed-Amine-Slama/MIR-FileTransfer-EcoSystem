@@ -8,10 +8,9 @@ import {
   endpointSideSchema,
   providerKindSchema,
   type EndpointSide,
-  type Provider,
   type ProviderKind,
 } from '@mir/contracts';
-import { casesApi } from '../../../lib/api/mock';
+import { api, type Organisation } from '../../../lib/api/endpoints';
 import { CORRIDORS, DEFAULT_CORRIDOR_ID, getCorridor } from '../../../lib/corridor/registry';
 import { useT } from '../../../lib/i18n/provider';
 import { CorridorFields, validateFields } from '../../../components/case/CorridorFields';
@@ -53,7 +52,7 @@ export default function ProviderSignUpPage(): React.JSX.Element {
   const [credentials, setCredentials] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [created, setCreated] = useState<Provider | null>(null);
+  const [created, setCreated] = useState<Organisation | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const corridor = getCorridor(corridorId);
@@ -83,8 +82,12 @@ export default function ProviderSignUpPage(): React.JSX.Element {
     setSubmitting(true);
     setError(null);
     try {
+      // The REAL endpoint, not the case layer's fixture store. An organisation
+      // is an account-layer record (migration 0010) and has to survive a
+      // reload — an application that vanished when the tab closed would be a
+      // worse failure than one that never submitted.
       setCreated(
-        await casesApi.registerProvider({
+        await api.organisations.create({
           kind,
           legalName: legalName.trim(),
           corridorId,

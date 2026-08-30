@@ -22,15 +22,16 @@ import type { Dictionary } from '../lib/i18n/dictionary';
 import { sideForRole } from '../lib/corridor/registry';
 import { useSession } from '../lib/session/session';
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge';
+import { Landing } from '../components/marketing/Landing';
 import {
   Card,
-  CardContent,
-  CardRoot,
   EmptyState,
   PageHeader,
   Main,
+  SectionHeading,
   Skeleton,
-  Spinner,
+  StatGrid,
+  StatTile,
   Table,
   TableBody,
   TableCell,
@@ -55,20 +56,21 @@ export default function Home(): React.JSX.Element {
   const t = useT();
   const { status, user, role } = useSession();
 
+  /*
+   * `/` IS TWO PAGES. A visitor gets the landing page; a signed-in user gets
+   * their dashboard. AppShell picks the chrome off the same distinction, so the
+   * marketing header and the application sidebar never appear together.
+   *
+   * The loading state renders the landing page rather than a spinner: it is
+   * correct for everyone who is not signed in, it is what most arrivals at this
+   * URL are, and a spinner on the front door is a worse first impression than a
+   * page that is briefly replaced.
+   */
+  if (status !== 'authenticated') return <Landing />;
+
   return (
     <Main wide>
       <PageHeader title={t.appName} description={t.appTagline} />
-
-      {status === 'loading' && <Spinner label={t.loading} />}
-
-      {status === 'anonymous' && (
-        <Card title={t.signInTitle} className="max-w-md">
-          <p className="text-sm text-muted-foreground">{t.signInDescription}</p>
-          <Link href="/login" className={buttonVariants()} data-testid="home-sign-in">
-            {t.navSignIn}
-          </Link>
-        </Card>
-      )}
 
       {status === 'authenticated' && role !== null && (
         <>
@@ -96,30 +98,6 @@ export default function Home(): React.JSX.Element {
 // ---------------------------------------------------------------------------
 // Building blocks
 // ---------------------------------------------------------------------------
-
-/**
- * A count tile. The numeral wears the text ink, never a status colour — the
- * label carries the meaning, so the tile is readable colour-blind and in
- * forced-colors mode.
- */
-function StatTile({ label, value }: { label: string; value: number | null }): React.JSX.Element {
-  return (
-    <CardRoot>
-      <CardContent className="space-y-1">
-        {value === null ? (
-          <Skeleton className="h-8 w-16" />
-        ) : (
-          <p className="text-3xl font-bold tabular-nums leading-none">{value}</p>
-        )}
-        <p className="text-sm text-muted-foreground">{label}</p>
-      </CardContent>
-    </CardRoot>
-  );
-}
-
-function StatGrid({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{children}</div>;
-}
 
 function AppointmentsMiniTable({
   appointments,
@@ -221,13 +199,16 @@ function LibyaDoctorDashboard(): React.JSX.Element {
   return (
     <>
       <StatGrid>
-        <StatTile label={t.statPatients} value={patientCount} />
+        {/* Each tile links to the list its number came from. A count with no
+            way through to the rows behind it is a fact nobody can act on. */}
+        <StatTile label={t.statPatients} value={patientCount} href="/patients" />
         <StatTile
           label={t.statAppointmentsTotal}
           value={appointments === null ? null : appointments.length}
+          href="/appointments"
         />
-        <StatTile label={t.statusAuthorised} value={count('authorised')} />
-        <StatTile label={t.statusConfirmed} value={count('confirmed')} />
+        <StatTile label={t.statusAuthorised} value={count('authorised')} href="/appointments" />
+        <StatTile label={t.statusConfirmed} value={count('confirmed')} href="/appointments" />
       </StatGrid>
       {appointments !== null && (
         <AppointmentsMiniTable appointments={appointments} title={t.dashboardRecent} />
@@ -295,11 +276,12 @@ function TunisiaDoctorDashboard(): React.JSX.Element {
   return (
     <>
       <StatGrid>
-        <StatTile label={t.dashboardAwaitingDecision} value={count('authorised')} />
-        <StatTile label={t.statusConfirmed} value={count('confirmed')} />
+        <StatTile label={t.dashboardAwaitingDecision} value={count('authorised')} href="/doctor" />
+        <StatTile label={t.statusConfirmed} value={count('confirmed')} href="/appointments" />
         <StatTile
           label={t.statAppointmentsTotal}
           value={appointments === null ? null : appointments.length}
+          href="/appointments"
         />
       </StatGrid>
       {appointments !== null && awaiting.length > 0 && (
@@ -333,8 +315,8 @@ function AdminDashboard(): React.JSX.Element {
 
   return (
     <StatGrid>
-      <StatTile label={t.auditAllowed} value={count('allowed')} />
-      <StatTile label={t.auditDenied} value={count('denied')} />
+      <StatTile label={t.auditAllowed} value={count('allowed')} href="/admin/audit" />
+      <StatTile label={t.auditDenied} value={count('denied')} href="/admin/audit" />
     </StatGrid>
   );
 }
@@ -472,9 +454,7 @@ function QuickActions({ role }: { role: Role }): React.JSX.Element {
   const t = useT();
   return (
     <section>
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-        {t.dashboardQuickActions}
-      </h2>
+      <SectionHeading>{t.dashboardQuickActions}</SectionHeading>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="home-actions">
         {/* Corridor destinations first: a provider's day starts with their
             caseload, not with the patient index. */}

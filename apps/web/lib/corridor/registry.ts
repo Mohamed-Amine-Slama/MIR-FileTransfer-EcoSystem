@@ -1,5 +1,6 @@
 import {
   CORRIDOR_ENDPOINT_ROLES,
+  ROLES,
   corridorSchema,
   resolveSide,
   type CaseSide,
@@ -96,6 +97,20 @@ export function rolesForSides(sides: readonly CaseSide[]): Role[] {
   if (sides.includes('ops')) roles.add('admin');
   return [...roles];
 }
+
+/**
+ * Every role, for screens that are about the USER rather than about a case —
+ * their profile, their settings, their language.
+ *
+ * Spelled this way rather than as a list of role literals: writing them out
+ * would hardcode the corridor into routing, which §4.3 forbids and the
+ * ratcheting test in this directory catches. It also cannot fall behind, since
+ * it IS the contract's role list.
+ *
+ * Note this still gates on being SIGNED IN. RoleGate refuses an anonymous
+ * visitor whatever is listed here.
+ */
+export const EVERY_ROLE: readonly Role[] = ROLES;
 
 /** Both provider sides — the usual gate for a case screen. */
 export const PROVIDER_ROLES: readonly Role[] = rolesForSides(['source', 'destination']);

@@ -48,6 +48,7 @@ export function Dropzone({
   directory?: boolean;
   multiple?: boolean;
   disabled?: boolean;
+  /** Applied to the file input. The drop surface gets `${testId}-zone`. */
   testId?: string;
   children?: ReactNode;
 }): React.JSX.Element {
@@ -90,7 +91,7 @@ export function Dropzone({
       onDragLeave={handleDragLeave}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
-      data-testid={testId}
+      data-testid={testId === undefined ? undefined : `${testId}-zone`}
       data-dragging={dragging ? 'true' : 'false'}
       className={cn(
         'rounded-lg border-2 border-dashed px-4 py-8 text-center transition-colors',
@@ -114,7 +115,13 @@ export function Dropzone({
             accept={accept}
             multiple={multiple}
             disabled={disabled}
-            data-testid={testId === undefined ? undefined : `${testId}-input`}
+            /*
+             * The caller's id goes on the INPUT, not on the drop surface.
+             * Automation drives a file picker with setInputFiles, which needs
+             * the input element itself; the zone gets the derived `-zone` id
+             * for the rarer case of asserting on drag state.
+             */
+            data-testid={testId}
             {...(directory ? DIRECTORY_ATTRS : {})}
             onChange={(event) => {
               const selected = Array.from(event.target.files ?? []);

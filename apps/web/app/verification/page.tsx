@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import type { VerificationStatus } from '@mir/contracts';
 import { PROVIDER_ROLES } from '../../lib/corridor/registry';
-import { useCurrentProvider } from '../../lib/provider/current-provider';
+import { useOrganisation } from '../../lib/account/organisation';
 import { useDateFormat, useT } from '../../lib/i18n/provider';
 import { RoleGate } from '../../components/RoleGate';
 import {
@@ -34,9 +34,17 @@ import type { Tone } from '../../components/case/labels';
  * refinement, so the date below cannot be a decided application with a blank
  * date.
  */
+/**
+ * APPLICANTS MUST REACH THIS SCREEN, and that is why the gate is not just the
+ * provider roles. §5.1 P0 requires an organisation to see where its application
+ * stands "with no need to contact the platform team" — and while it is pending,
+ * nobody at that organisation holds a clinical role yet. Gating on the roles the
+ * decision GRANTS would have made the screen reachable only after it stopped
+ * being needed.
+ */
 export default function VerificationPage(): React.JSX.Element {
   return (
-    <RoleGate allow={PROVIDER_ROLES}>
+    <RoleGate allow={[...PROVIDER_ROLES, 'applicant']}>
       <VerificationStatusView />
     </RoleGate>
   );
@@ -58,12 +66,27 @@ function alertToneFor(status: VerificationStatus): Tone {
 function VerificationStatusView(): React.JSX.Element {
   const t = useT();
   const formatDate = useDateFormat();
-  const { provider, loading } = useCurrentProvider();
+  // The REAL organisation record, not the case layer's fixture. Verification is
+  // an account-layer concern (migration 0010) and the row a screen shows here
+  // has to be the one ops actually decided on.
+  const { organisation: provider, loading, failed } = useOrganisation();
 
   if (loading) {
     return (
       <Main>
         <Spinner label={t.loading} />
+      </Main>
+    );
+  }
+
+  // A load failure is NOT "you have not applied". Telling an applicant they
+  // have no application when the request merely failed would send them to fill
+  // the form in a second time.
+  if (failed) {
+    return (
+      <Main>
+        <PageHeader title={t.verificationTitle} />
+        <Alert tone="danger">{t.genericError}</Alert>
       </Main>
     );
   }

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { KeyRound, LogIn } from 'lucide-react';
+import { KeyRound, LogIn, ShieldCheck } from 'lucide-react';
 import { useT } from '../../lib/i18n/provider';
 import { useSession } from '../../lib/session/session';
 import { Alert, Button, Card, Field, Input, Main, PageHeader } from '../../components/ui';
@@ -64,8 +64,19 @@ export default function LoginPage(): React.JSX.Element {
   };
 
   return (
-    <Main className="max-w-md">
-      <PageHeader title={t.signInTitle} description={t.signInDescription} />
+    /*
+     * A split panel on desktop, a single column on a phone.
+     *
+     * The second panel is not decoration: someone arriving at a sign-in form
+     * for a platform that moves patient records across a border wants to know
+     * what it is before typing a password, and the three lines there are the
+     * same ones the landing page leads with. It is hidden below `lg` rather
+     * than stacked, because on a phone it would push the form off the first
+     * screen — and the form is why anyone is here.
+     */
+    <div className="mx-auto grid w-full max-w-5xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-2 lg:gap-16 lg:py-20">
+      <Main className="max-w-md px-0 py-0 sm:px-0">
+        <PageHeader title={t.signInTitle} description={t.signInDescription} />
 
       <Card>
         <form
@@ -144,6 +155,24 @@ export default function LoginPage(): React.JSX.Element {
         <KeyRound className="size-4" aria-hidden="true" />
         {t.signInContinue}
       </a>
-    </Main>
+      </Main>
+
+      <aside className="hidden flex-col justify-center lg:flex" aria-hidden="true">
+        <p className="marketing-display text-3xl">{t.landingHeadline}</p>
+        <p className="mt-4 max-w-md text-muted-foreground">{t.landingSubhead}</p>
+        <ul className="mt-8 space-y-3 text-sm">
+          {[
+            t.landingFeatureTransferTitle,
+            t.landingFeaturePipelineTitle,
+            t.landingFeatureBillingTitle,
+          ].map((line) => (
+            <li key={line} className="flex items-start gap-2.5">
+              <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
+              {line}
+            </li>
+          ))}
+        </ul>
+      </aside>
+    </div>
   );
 }
