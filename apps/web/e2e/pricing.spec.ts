@@ -102,12 +102,20 @@ test.describe('pricing (§5.7)', () => {
 
   test('scrolls the comparison table inside its own container (§4.5)', async ({ page }) => {
     await page.goto('/pricing');
-    // The page body must never scroll horizontally — a wide table that does
-    // that makes every screen on a phone worse, not just this one.
+    await expect(page.getByTestId('pricing-comparison')).toBeVisible();
+
+    // The property that matters: a table wider than a phone must scroll
+    // ITSELF. If the page body scrolls instead, every screen at that width
+    // gets worse, not just this one.
+    const bodyOverflows = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    );
+    expect(bodyOverflows).toBe(false);
+
     const overflow = await page.evaluate(() => {
-      const el = document.querySelector('table')?.parentElement;
-      return el === null || el === undefined ? null : getComputedStyle(el).overflowX;
+      const el = document.querySelector('[data-testid="pricing-comparison"]');
+      return el === null ? null : getComputedStyle(el).overflowX;
     });
-    expect(overflow).toBe('auto');
+    expect(['auto', 'scroll']).toContain(overflow);
   });
 });

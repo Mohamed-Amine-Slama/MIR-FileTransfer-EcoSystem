@@ -25,19 +25,20 @@ test.describe('sign-up (§5.1)', () => {
 
   test('states the password rule up front rather than after a rejection', async ({ page }) => {
     await page.goto('/signup');
-    // A minimum discovered only on submit is a rule the user had no way to obey.
-    await expect(page.getByText(/12/)).toBeVisible();
+    // A minimum discovered only on submit is a rule the user had no way to
+    // obey. Scoped to the password field's own hint: a bare /12/ also matches
+    // the phone placeholder, which is a different 12.
+    const hint = page.getByTestId('signup-password').locator('xpath=../..');
+    await expect(hint).toContainText(/12/);
   });
 
   test('offers a way back to sign-in from the point of failure', async ({ page }) => {
     // §5.1: someone who already has an account is ON this screen, not hunting
-    // through a footer for the other one.
-    await page.goto('/signup');
-    await expect(page.getByRole('link', { name: /.+/ }).filter({ hasText: /.+/ })).not.toHaveCount(
-      0,
-    );
+    // through a footer for the other one — and vice versa.
     await page.goto('/login');
     await expect(page.getByTestId('signup-link')).toBeVisible();
+    await page.getByTestId('signup-link').click();
+    await expect(page).toHaveURL(/\/signup/);
   });
 });
 

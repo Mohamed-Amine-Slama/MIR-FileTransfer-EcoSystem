@@ -184,7 +184,7 @@ function ComparisonTable({ plans }: { plans: PlanTier[] }): React.JSX.Element {
   const t = useT();
 
   return (
-    <div className="overflow-x-auto rounded-lg border">
+    <div className="overflow-x-auto rounded-lg border" data-testid="pricing-comparison">
       <table className="w-full min-w-[36rem] border-collapse text-sm">
         <caption className="sr-only">{t.pricingTitle}</caption>
         <thead>
