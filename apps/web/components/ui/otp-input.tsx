@@ -123,8 +123,8 @@ export function OtpInput({
     >
       {digits.map((digit, index) => (
         <input
-          // Position is the identity here; there is nothing else to key on.
-          // eslint-disable-next-line react/no-array-index-key
+          // Position is the identity here; there is nothing else to key on,
+          // and the list is a fixed six that never reorders.
           key={index}
           ref={(el) => {
             boxes.current[index] = el;

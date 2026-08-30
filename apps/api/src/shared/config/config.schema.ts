@@ -70,6 +70,37 @@ export const configSchema = z.object({
   KEYCLOAK_AUDIENCE: nonEmpty('KEYCLOAK_AUDIENCE'),
   KEYCLOAK_JWKS_URL: z.string().url('KEYCLOAK_JWKS_URL must be a URL'),
 
+  /**
+   * Service-account credentials for Keycloak's admin API, used ONLY by
+   * self-service registration (brief §5.1): creating the Keycloak user is what
+   * makes a password exist, and ADR-2 keeps passwords entirely on that side.
+   *
+   * OPTIONAL, and deliberately so. Most deployments of this application
+   * provision accounts out of band and want no admin credential in the API's
+   * environment at all — a client that can create users is the single most
+   * valuable secret here. When it is absent, /auth/register answers 501, the
+   * same honest refusal apps/web/app/auth/password-login/route.ts already gives
+   * for an unconfigured token endpoint. It never degrades to creating a local
+   * account with a password this service invented.
+   */
+  KEYCLOAK_ADMIN_CLIENT_ID: z.string().min(1).optional(),
+  KEYCLOAK_ADMIN_CLIENT_SECRET: z.string().min(1).optional(),
+  /** Realm to administer. Derived from the issuer when unset. */
+  KEYCLOAK_REALM: z.string().min(1).optional(),
+
+  // --- outbound mail (§5.1) ------------------------------------------------
+  // Optional for the same reason: no adapter is wired, and MailModule refuses
+  // to boot outside development rather than pretending to send.
+  MAIL_FROM: z.string().email('MAIL_FROM must be an email address').optional(),
+
+  /**
+   * Public origin of the web app, for links inside outbound mail (seat
+   * invitations). Not derived from the request: a Host header is
+   * attacker-controlled, and a link built from one is a redirect to wherever
+   * the attacker asked.
+   */
+  APP_PUBLIC_URL: z.string().url('APP_PUBLIC_URL must be a URL').optional(),
+
   // --- object storage (P2.4) ----------------------------------------------
   AWS_REGION: nonEmpty('AWS_REGION'),
   S3_BUCKET_ORIGINALS: nonEmpty('S3_BUCKET_ORIGINALS'),

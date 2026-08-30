@@ -9,6 +9,7 @@ import { DatabaseModule } from './shared/db/database.module';
 import { GlobalExceptionFilter } from './shared/errors/global-exception.filter';
 import { SecurityHeadersMiddleware } from './shared/http/security-headers.middleware';
 import { EventsModule } from './shared/events/events.module';
+import { MailModule } from './shared/mail';
 import { RateLimitModule } from './shared/ratelimit/rate-limit.module';
 import { TracingModule } from './shared/observability/tracing.module';
 import { RateLimitGuard } from './shared/ratelimit/rate-limit.guard';
@@ -18,6 +19,8 @@ import { ConsentModule } from './modules/consent';
 import { IdentityModule } from './modules/identity';
 import { ImagingModule } from './modules/imaging';
 import { NotificationsModule } from './modules/notifications';
+import { OrganisationsModule } from './modules/organisations';
+import { PlansModule } from './modules/plans';
 import { PatientsModule } from './modules/patients';
 import { SchedulingModule } from './modules/scheduling';
 
@@ -34,6 +37,7 @@ import { SchedulingModule } from './modules/scheduling';
     ConfigModule,
     DatabaseModule,
     EventsModule,
+    MailModule,
     RateLimitModule,
     TracingModule,
     // Needed by the P1.5 bootstrap audit to enumerate every registered route.
@@ -47,6 +51,8 @@ import { SchedulingModule } from './modules/scheduling';
     SchedulingModule,
     BillingModule,
     NotificationsModule,
+    OrganisationsModule,
+    PlansModule,
   ],
   providers: [
     TokenVerifier,

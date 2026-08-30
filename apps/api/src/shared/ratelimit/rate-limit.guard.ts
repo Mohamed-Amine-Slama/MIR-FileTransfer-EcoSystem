@@ -8,6 +8,7 @@ import {
   SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { createHash } from 'node:crypto';
 import type { Response } from 'express';
 import { getContext } from '../context/request-context';
 import { RateLimiter, type RateLimitKind } from './rate-limiter';
@@ -60,8 +61,21 @@ export const RATE_LIMIT_KEY = 'mir:rate_limit';
  *   bounds messages to any ONE number while leaving the clinic's throughput
  *   untouched. The abuse being prevented is bombing a phone, so the phone's
  *   owner is what the budget belongs to.
+ *
+ * `body:<field>` — a field of the request body, for a budget that protects an
+ *   account the caller has not authenticated as. Verifying an emailed code is
+ *   the case it exists for: the request is public, so `user` is unavailable and
+ *   the guard would fall back to the IP — which puts an entire clinic behind
+ *   one NAT into a single three-per-fifteen-minutes bucket, so the second
+ *   member of staff to sign up that morning is locked out by the first. The
+ *   abuse being prevented is guessing the code for ONE account, so the budget
+ *   belongs to that account.
+ *
+ *   The value is HASHED into the bucket key. Rate-limiter keys outlive the
+ *   request and may reach a shared store; an email address is not something to
+ *   leave lying in one when a digest works identically.
  */
-export type RateLimitKeyBy = 'user' | `param:${string}`;
+export type RateLimitKeyBy = 'user' | `param:${string}` | `body:${string}`;
 
 export interface RateLimitOptions {
   keyBy?: RateLimitKeyBy;
@@ -98,10 +112,23 @@ export class RateLimitGuard implements CanActivate {
     const ctx = getContext();
     const request = context
       .switchToHttp()
-      .getRequest<{ ip?: string; params?: Record<string, string> }>();
+      .getRequest<{ ip?: string; params?: Record<string, string>; body?: unknown }>();
 
     let identifier: string;
-    if (meta.keyBy.startsWith('param:')) {
+    if (meta.keyBy.startsWith('body:')) {
+      const name = meta.keyBy.slice('body:'.length);
+      const body = request.body;
+      const value =
+        typeof body === 'object' && body !== null
+          ? (body as Record<string, unknown>)[name]
+          : undefined;
+      // Same reasoning as the missing-param case below: a request with no such
+      // field must not join one shared bucket with every other malformed one.
+      identifier =
+        typeof value === 'string' && value !== ''
+          ? `${meta.keyBy}:${createHash('sha256').update(value.toLowerCase()).digest('hex')}`
+          : `ip:${request.ip ?? 'unknown'}`;
+    } else if (meta.keyBy.startsWith('param:')) {
       const name = meta.keyBy.slice('param:'.length);
       const value = request.params?.[name];
       // A missing parameter must not collapse every caller into one shared

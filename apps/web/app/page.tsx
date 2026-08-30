@@ -422,6 +422,11 @@ function destinationsFor(role: Role): { key: DestinationKey; href: string }[] {
       ];
     case 'admin':
       return [{ key: 'audit', href: '/admin/audit' }];
+    case 'applicant':
+      // An applicant has no destinations. Their whole screen is the
+      // verification status, which the dashboard surfaces directly rather than
+      // as one card among several.
+      return [];
   }
 }
 

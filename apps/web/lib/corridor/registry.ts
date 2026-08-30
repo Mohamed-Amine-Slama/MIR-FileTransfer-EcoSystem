@@ -1,4 +1,5 @@
 import {
+  CORRIDOR_ENDPOINT_ROLES,
   corridorSchema,
   resolveSide,
   type CaseSide,
@@ -22,7 +23,10 @@ const LIBYA_TUNISIA: Corridor = corridorSchema.parse({
   id: 'ly-tn',
   source: {
     country: 'LY',
-    role: 'libya_doctor',
+    // Read from the shared mapping rather than restated: the API grants this
+    // same role when ops approves a verification, and two copies is how the
+    // two sides come to disagree about which one a corridor puts where.
+    role: CORRIDOR_ENDPOINT_ROLES['ly-tn']?.source,
     licensingBodyKey: 'licensingBodyLyMedicalSyndicate',
     documentRequirements: [
       { key: 'licenceNumber', kind: 'text', required: true, labelKey: 'fieldLicenceNumber' },
@@ -31,7 +35,7 @@ const LIBYA_TUNISIA: Corridor = corridorSchema.parse({
   },
   destination: {
     country: 'TN',
-    role: 'tunisia_doctor',
+    role: CORRIDOR_ENDPOINT_ROLES['ly-tn']?.destination,
     licensingBodyKey: 'licensingBodyTnOrdreDesMedecins',
     documentRequirements: [
       { key: 'cnomNumber', kind: 'text', required: true, labelKey: 'fieldCnomNumber' },
