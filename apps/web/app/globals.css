@@ -19,13 +19,34 @@
 /*
  * Design tokens — "modern institutional".
  *
- * Two layers: raw values on :root (light) with a dark override, then an
- * inline @theme mapping so Tailwind utilities (bg-background, text-primary…)
- * resolve through the CSS variables and follow the colour scheme at runtime.
+ * Two layers: raw values on :root (light) with dark overrides, then an inline
+ * @theme mapping so Tailwind utilities (bg-background, text-primary…) resolve
+ * through the CSS variables and follow the colour scheme at runtime.
  *
  * Every fg/bg pair below is contrast-checked against WCAG 2.2 AA
  * (>=4.5:1 text, >=3:1 UI): primary #1d5c9e on white is 6.7:1, muted
  * #52627a on white is 6.2:1, and each status fg is >=6.5:1 on its tint.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE DARK PALETTE IS WRITTEN TWICE
+ *
+ * The theme has three states, and they need two different selectors:
+ *
+ *   "system"  -> no data-theme attribute; only prefers-color-scheme separates
+ *                light from dark.
+ *   "dark"    -> data-theme="dark" must win even on a light OS.
+ *   "light"   -> data-theme="light" must win even on a dark OS, which is what
+ *                the :not() in the media query is for.
+ *
+ * One declaration could cover all three with CSS `light-dark()`, but that
+ * function landed in browsers in 2024 and this product is used on clinic
+ * machines that are not new. The duplication is the price of that support.
+ *
+ * Duplication drifts, so it is not left to review: `lib/theme/tokens.test.ts`
+ * asserts the two dark blocks declare exactly the same properties with exactly
+ * the same values, and that neither omits a token the light block declares.
+ * Edit one, and the test tells you about the other.
+ * ---------------------------------------------------------------------------
  */
 :root {
   --background: #f6f8fa;
@@ -57,11 +78,23 @@
   --info: #174e88;
   --info-surface: #e7f0fa;
 
+  /* The application chrome. Separated from --card so the sidebar can sit a
+     step back from the content it frames without every card following it. */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #101826;
+
+  /* The marketing register (§4.1 keeps this off clinical screens — see the
+     .marketing scope below). Two stops, used for a soft mesh behind the
+     landing and pricing heroes. */
+  --marketing-from: #e8f0fb;
+  --marketing-to: #f6f8fa;
+  --marketing-ink: #0d2947;
+
   --radius: 0.5rem;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --background: #0e141b;
     --foreground: #e7ecf2;
     --card: #161d26;
@@ -90,7 +123,66 @@
     --danger-surface: #3a1511;
     --info: #a8cdf5;
     --info-surface: #122a41;
+
+    --sidebar: #121922;
+    --sidebar-foreground: #e7ecf2;
+
+    --marketing-from: #142234;
+    --marketing-to: #0e141b;
+    --marketing-ink: #dbe8f7;
   }
+}
+
+:root[data-theme='dark'] {
+  --background: #0e141b;
+  --foreground: #e7ecf2;
+  --card: #161d26;
+  --card-foreground: #e7ecf2;
+  --muted: #1c2530;
+  --muted-foreground: #9db0c3;
+  --border: #2a3542;
+  --input: #374556;
+
+  --primary: #6aa8e8;
+  --primary-foreground: #0a2036;
+  --secondary: #21303f;
+  --secondary-foreground: #cfe0f2;
+  --accent: #1a2836;
+  --accent-foreground: #a8cdf5;
+  --ring: #6aa8e8;
+
+  --destructive: #f2a49d;
+  --destructive-foreground: #3d0f0b;
+
+  --success: #93d8ab;
+  --success-surface: #10301c;
+  --warning: #f5cf95;
+  --warning-surface: #382a10;
+  --danger: #f2a49d;
+  --danger-surface: #3a1511;
+  --info: #a8cdf5;
+  --info-surface: #122a41;
+
+  --sidebar: #121922;
+  --sidebar-foreground: #e7ecf2;
+
+  --marketing-from: #142234;
+  --marketing-to: #0e141b;
+  --marketing-ink: #dbe8f7;
+}
+
+/*
+ * Tell the browser which scheme is in force, so form controls, scrollbars, and
+ * the canvas behind the page follow the CHOICE and not just the OS. Without
+ * this a user on a light OS who picks dark gets a dark page with white native
+ * selects and a white overscroll gutter.
+ */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
 }
 
 @theme inline {
@@ -119,10 +211,41 @@
   --color-danger-surface: var(--danger-surface);
   --color-info: var(--info);
   --color-info-surface: var(--info-surface);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-marketing-from: var(--marketing-from);
+  --color-marketing-to: var(--marketing-to);
+  --color-marketing-ink: var(--marketing-ink);
 
   --radius-sm: calc(var(--radius) - 0.125rem);
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) + 0.25rem);
+  --radius-xl: calc(var(--radius) + 0.75rem);
+
+  /*
+   * Elevation, as three steps and no more.
+   *
+   * Each step means one thing: 1 is a resting surface, 2 is a surface that has
+   * been raised by a hover or a drag, 3 is a layer over the page (menu,
+   * dialog, drawer). A fourth step invites choosing by eye, which is how a
+   * table row ends up floating higher than the dialog above it.
+   *
+   * Tuned dark rather than black: on the dark palette a pure-black shadow
+   * disappears, so these read as a soft halo instead of a smudge.
+   */
+  --shadow-1: 0 1px 2px 0 rgb(16 24 38 / 0.06), 0 1px 3px 0 rgb(16 24 38 / 0.05);
+  --shadow-2: 0 2px 4px -1px rgb(16 24 38 / 0.08), 0 4px 12px -2px rgb(16 24 38 / 0.08);
+  --shadow-3: 0 8px 16px -4px rgb(16 24 38 / 0.12), 0 16px 32px -8px rgb(16 24 38 / 0.14);
+
+  /*
+   * Motion. Fast enough to feel like response rather than animation — §4.1
+   * asks for calm, and a 300ms ease on a status badge reads as decoration on a
+   * screen someone checks forty times a day. Every duration here is overridden
+   * to ~0 under prefers-reduced-motion below.
+   */
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
 
   /* IBM Plex Sans Arabic carries both scripts; --font-plex is set by
      next/font in app/layout.tsx. Fallbacks paint immediately (display:swap)
@@ -155,6 +278,16 @@
     outline-offset: 2px;
   }
 
+  /*
+   * Numerals in tables, money, dates, and counts must not jitter as they
+   * change. Applied at the element level rather than remembered per screen.
+   */
+  th,
+  td,
+  time {
+    font-variant-numeric: tabular-nums;
+  }
+
   /* A clinic screen on a slow link should not also be a vestibular problem. */
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -163,5 +296,33 @@
       animation-duration: 3s !important;
       transition-duration: 0.01ms !important;
     }
+  }
+}
+
+/*
+ * The marketing register — brief §4.1, held to the public surface.
+ *
+ * §4.1 requires the signed-in product to read as "calm, professional, precise,
+ * not flashy", because it is used by non-technical clinic staff to move real
+ * patient data. A landing page has the opposite job. Both are true, so the
+ * expressive treatment is SCOPED rather than global: it only applies beneath
+ * `.marketing`, which `PublicChrome` sets and no application screen does.
+ *
+ * If a gradient ever shows up on a case, file, or money screen, the scope has
+ * been broken and §4.1 with it.
+ */
+@layer components {
+  .marketing-hero {
+    background:
+      radial-gradient(ellipse 80% 60% at 50% -10%, var(--color-marketing-from), transparent 70%),
+      linear-gradient(to bottom, var(--color-marketing-from), var(--color-marketing-to));
+  }
+
+  .marketing-display {
+    color: var(--color-marketing-ink);
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.08;
+    text-wrap: balance;
   }
 }
