@@ -8,6 +8,7 @@ import type { Role } from '@mir/contracts';
 import { useT } from '../../lib/i18n/provider';
 import type { Dictionary } from '../../lib/i18n/dictionary';
 import { cn } from '../../lib/utils';
+import { AccountPreferencesSync } from '../../lib/account/preferences';
 import { SessionTimeoutNotice } from '../SessionTimeoutNotice';
 import { Sheet, SheetContent, SheetTrigger } from '../ui';
 import { BrandMark } from './BrandMark';
@@ -61,6 +62,10 @@ export function AppChrome({
 
   return (
     <div className="flex min-h-screen flex-col">
+      {/* Renders nothing. Applies account-level appearance to a device that has
+          expressed no choice of its own — see the note on the component. */}
+      <AccountPreferencesSync />
+
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:start-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-foreground"
