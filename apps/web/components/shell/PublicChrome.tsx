@@ -136,9 +136,16 @@ export function PublicChrome({ children }: { children: ReactNode }): React.JSX.E
         )}
       </header>
 
-      <main id="main-content" tabIndex={-1} className="flex-1 outline-none">
+      {/*
+        A DIV, not a <main>. Pages supply their own landmark — prose-shaped
+        screens through the `Main` component, full-bleed ones (landing,
+        pricing) directly — and nesting one inside another is invalid HTML that
+        gives a screen reader two "main" landmarks to choose between. AppChrome
+        makes the same choice for the same reason.
+      */}
+      <div id="main-content" tabIndex={-1} className="flex-1 outline-none">
         {children}
-      </main>
+      </div>
 
       <footer className="border-t bg-card">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-8 sm:px-6">
