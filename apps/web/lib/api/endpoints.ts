@@ -1,4 +1,15 @@
-import type { Role } from '@mir/contracts';
+import type {
+  InviteMemberInput,
+  Membership,
+  PlanCode,
+  PlanTier,
+  PlanUsage,
+  RegistrationInput,
+  Role,
+  Subscription,
+  UpdateProfileInput,
+  UserPreferences,
+} from '@mir/contracts';
 import { apiFetch, newIdempotencyKey } from './client';
 
 /**
@@ -17,6 +28,37 @@ export interface SessionUser {
   /** Patients only: set once the account is linked to a medical record (P5.2). */
   patientId?: string;
   mfaEnrolled: boolean;
+}
+
+/**
+ * A user's own record. Distinct from `SessionUser`, which is the minimum the
+ * chrome needs on every page; this is what the profile screen loads.
+ */
+export interface UserProfile {
+  id: string;
+  email: string | null;
+  fullName: string;
+  phoneE164: string;
+  jobTitle: string | null;
+  role: Role;
+  status: 'pending_verification' | 'active' | 'suspended';
+  createdAt: string;
+}
+
+/** The organisation the signed-in user acts for — the durable form of `Provider`. */
+export interface Organisation {
+  id: string;
+  kind: 'clinic' | 'laboratory' | 'doctor';
+  legalName: string;
+  corridorId: string;
+  side: 'source' | 'destination';
+  verification: {
+    status: 'pending' | 'approved' | 'rejected';
+    submittedAt: string;
+    decidedAt?: string;
+    reasonKey?: string;
+  };
+  seatCount: number;
 }
 
 export interface Patient {
@@ -210,5 +252,79 @@ export const api = {
 
   audit: {
     recent: (limit = 100) => apiFetch<{ events: AuditEvent[] }>(`/audit?limit=${limit}`),
+  },
+
+  /**
+   * Sign-up and account self-service — brief §5.1.
+   *
+   * The three registration calls are UNAUTHENTICATED and every one of them
+   * resolves with no body, whatever happened. That is not laziness: registered,
+   * already-registered, and unknown must be indistinguishable, or the form
+   * becomes an oracle for which clinicians have accounts here. A screen calling
+   * these can only ever say "check your email".
+   */
+  account: {
+    register: (input: RegistrationInput) =>
+      apiFetch<void>('/auth/register', { method: 'POST', body: input }),
+    verifyEmail: (email: string, code: string) =>
+      apiFetch<void>('/auth/verify-email', { method: 'POST', body: { email, code } }),
+    resendCode: (email: string, locale: string) =>
+      apiFetch<void>('/auth/resend-code', { method: 'POST', body: { email, locale } }),
+
+    profile: () => apiFetch<UserProfile>('/auth/profile'),
+    updateProfile: (input: UpdateProfileInput) =>
+      apiFetch<UserProfile>('/auth/profile', { method: 'PATCH', body: input }),
+
+    preferences: () => apiFetch<UserPreferences>('/auth/preferences'),
+    /** PUT, not PATCH: the settings screen owns the whole object. */
+    savePreferences: (next: UserPreferences) =>
+      apiFetch<UserPreferences>('/auth/preferences', { method: 'PUT', body: next }),
+  },
+
+  /** Organisations and seats — brief §3, §5.5. */
+  organisations: {
+    /** `organisation: null` is a normal state for an applicant who has not applied. */
+    mine: () => apiFetch<{ organisation: Organisation | null }>('/organisations/mine'),
+    create: (input: {
+      kind: Organisation['kind'];
+      legalName: string;
+      corridorId: string;
+      side: Organisation['side'];
+      credentials: Record<string, unknown>;
+      seatCount: number;
+    }) => apiFetch<Organisation>('/organisations', { method: 'POST', body: input }),
+    members: (id: string) =>
+      apiFetch<{ members: Membership[] }>(`/organisations/${id}/members`),
+    invite: (id: string, input: InviteMemberInput) =>
+      apiFetch<void>(`/organisations/${id}/invitations`, { method: 'POST', body: input }),
+    acceptInvitation: (token: string) =>
+      apiFetch<Organisation>('/invitations/accept', { method: 'POST', body: { token } }),
+
+    // --- ops (§5.8) --------------------------------------------------------
+    queue: () => apiFetch<{ organisations: Organisation[] }>('/admin/organisations'),
+    /**
+     * Ops decides WHETHER to approve, never what approving grants — the role
+     * is derived server-side from the organisation's own corridor and side.
+     * There is deliberately no role field here to pass.
+     */
+    decide: (id: string, approve: boolean, reasonKey?: string) =>
+      apiFetch<void>(`/admin/organisations/${id}/decision`, {
+        method: 'POST',
+        body: { approve, reasonKey },
+      }),
+  },
+
+  /** Plans — brief §2, §5.7. */
+  plans: {
+    /** Public: the pricing page is served to visitors with no session. */
+    catalogue: () => apiFetch<{ plans: PlanTier[] }>('/plans'),
+    mine: () =>
+      apiFetch<{ subscription: Subscription | null; usage: PlanUsage }>('/subscriptions/mine'),
+    /**
+     * Records an INTENT to be on a tier. It takes no money — no payment rail is
+     * wired while blocking item L7 is open — and the screen says so.
+     */
+    change: (planCode: PlanCode) =>
+      apiFetch<void>('/subscriptions', { method: 'POST', body: { planCode } }),
   },
 };

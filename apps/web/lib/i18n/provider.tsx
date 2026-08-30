@@ -1,6 +1,15 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   isContentLocale,
   UI_LOCALE_DIRECTION,
@@ -32,6 +41,15 @@ interface LocaleContextValue {
   locale: UiLocale;
   dir: 'rtl' | 'ltr';
   setLocale: (next: UiLocale) => void;
+  /**
+   * Apply a locale stored on the account, but only if this browser has none.
+   *
+   * Same precedence as the theme, for the same reason: a choice made on this
+   * device is the more deliberate act, and having the account copy overwrite it
+   * on every sign-in makes the switcher feel broken. The account value is a
+   * default for a device that has not been told otherwise.
+   */
+  adoptAccountDefault: (next: UiLocale) => void;
   t: Dictionary;
 }
 
@@ -39,6 +57,9 @@ const LocaleContext = createContext<LocaleContextValue | null>(null);
 
 export function LocaleProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const [locale, setLocaleState] = useState<UiLocale>(DEFAULT_LOCALE);
+  // Whether THIS browser holds an explicit choice. A ref, not state: it gates
+  // an effect and must not trigger a render of its own.
+  const hasLocalChoice = useRef(false);
 
   // Restore the stored preference after mount. Server and first client render
   // therefore agree on DEFAULT_LOCALE, which is what avoids a hydration
@@ -46,7 +67,10 @@ export function LocaleProvider({ children }: { children: ReactNode }): React.JSX
   useEffect(() => {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     const parsed = uiLocaleSchema.safeParse(stored);
-    if (parsed.success) setLocaleState(parsed.data);
+    if (parsed.success) {
+      hasLocalChoice.current = true;
+      setLocaleState(parsed.data);
+    }
   }, []);
 
   useEffect(() => {
@@ -55,13 +79,26 @@ export function LocaleProvider({ children }: { children: ReactNode }): React.JSX
   }, [locale]);
 
   const setLocale = useCallback((next: UiLocale) => {
+    hasLocalChoice.current = true;
+    setLocaleState(next);
+    window.localStorage.setItem(STORAGE_KEY, next);
+  }, []);
+
+  const adoptAccountDefault = useCallback((next: UiLocale) => {
+    if (hasLocalChoice.current) return;
     setLocaleState(next);
     window.localStorage.setItem(STORAGE_KEY, next);
   }, []);
 
   const value = useMemo<LocaleContextValue>(
-    () => ({ locale, dir: UI_LOCALE_DIRECTION[locale], setLocale, t: DICTIONARIES[locale] }),
-    [locale, setLocale],
+    () => ({
+      locale,
+      dir: UI_LOCALE_DIRECTION[locale],
+      setLocale,
+      adoptAccountDefault,
+      t: DICTIONARIES[locale],
+    }),
+    [locale, setLocale, adoptAccountDefault],
   );
 
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;

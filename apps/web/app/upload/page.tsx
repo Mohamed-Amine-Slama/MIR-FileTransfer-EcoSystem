@@ -17,6 +17,7 @@ import {
   Alert,
   Badge,
   Card,
+  Dropzone,
   Field,
   Main,
   PageHeader,
@@ -107,9 +108,16 @@ function UploadScreen() {
     })();
   }, []);
 
-  const onFolderSelected = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const selected = Array.from(event.target.files ?? []);
+  /**
+   * Takes the files, wherever they came from — the folder picker or a drop.
+   *
+   * Deliberately signature-agnostic about the source: the validation, session
+   * creation, and queueing below are the P7.3 gate and must be identical on
+   * both paths. A drop handler that did its own thing is how one route ends up
+   * skipping `validateMedicalFile`.
+   */
+  const acceptFiles = useCallback(
+    async (selected: File[]) => {
       if (selected.length === 0 || patientId === '') return;
 
       // §5.2 P0: validated BEFORE a session is created and before a single
@@ -204,32 +212,26 @@ function UploadScreen() {
           </Field>
         </div>
 
-        <label
-          className={
-            patientId === ''
-              ? 'block cursor-not-allowed opacity-55'
-              : 'block cursor-pointer'
-          }
-        >
+        {/*
+          `directory` keeps the folder picker: a study is a FOLDER of many
+          files, often extensionless, often under DICOM/ or IMAGES/ on a clinic
+          CD, and no drop handler can offer that. Dragging is the addition, not
+          the replacement — a doctor on a tablet has nothing to drag, and a
+          keyboard user cannot drag at all.
+        */}
+        <div className={patientId === '' ? 'opacity-55' : undefined}>
           <span className="mb-1.5 block text-sm font-semibold">{t.uploadFolderLabel}</span>
-          <span className="flex flex-col items-center gap-2 rounded-lg border-2 border-dashed bg-muted/40 px-4 py-10 text-center transition-colors hover:border-primary">
-            <FolderUp className="size-8 text-muted-foreground" aria-hidden="true" />
-            <span className="text-sm text-muted-foreground">{t.uploadDropHint}</span>
-          </span>
-          {/* webkitdirectory: a study is a FOLDER of many files, often
-              extensionless, often under DICOM/ or IMAGES/ on a clinic CD. */}
-          <input
-            data-testid="folder-input"
-            type="file"
-            multiple
-            className="sr-only"
+          <Dropzone
+            testId="folder-input"
+            label={t.uploadFolderLabel}
+            hint={t.uploadDropHint}
+            directory
             disabled={patientId === ''}
-            // @ts-expect-error — non-standard but universally supported attribute
-            webkitdirectory=""
-            directory=""
-            onChange={(e) => void onFolderSelected(e)}
-          />
-        </label>
+            onFiles={(selected) => void acceptFiles(selected)}
+          >
+            <FolderUp className="size-8 text-muted-foreground" aria-hidden="true" />
+          </Dropzone>
+        </div>
       </Card>
 
       {files.length > 0 && (
