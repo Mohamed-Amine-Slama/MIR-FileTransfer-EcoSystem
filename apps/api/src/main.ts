@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { loadConfig } from './shared/config/config.schema';
 import { assertAllRoutesDeclareAccess } from './shared/authz/route-access-audit';
+import { ScrubbingLogger } from './shared/observability/scrubbing.logger';
 
 /**
  * Load a local `.env` for development only.
@@ -32,7 +33,17 @@ async function bootstrap(): Promise<void> {
     // Real upload traffic goes through the resumable transport (P7), never
     // through the JSON body parser.
     bodyParser: true,
+    // P13 — hold framework startup lines until the scrubbing logger is
+    // installed on the next line. Without this, everything Nest logs while
+    // constructing modules is written by the default console logger and has
+    // already escaped by the time `useLogger` runs.
+    bufferLogs: true,
   });
+
+  // P13 — every log line goes through the scrubber. This is the wiring that
+  // was missing: log-scrubber.ts was tested but unreachable from a running
+  // process, so GlobalExceptionFilter printed exception messages verbatim.
+  app.useLogger(new ScrubbingLogger());
 
   // Express advertises itself by default. Disabled at the adapter as well as
   // stripped in SecurityHeadersMiddleware, so it is never set in the first

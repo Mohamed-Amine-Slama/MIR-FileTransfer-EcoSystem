@@ -53,7 +53,7 @@ const GATES = [
   ['P11.1', 'Payment rail confirmed viable', 'blocked', 'L7 + Stripe entity jurisdiction'],
   ['P11.2', 'Idempotency + out-of-order webhooks', 'verified', '10 replays -> 1 state change'],
   ['P12', 'No clinical data in notifications', 'verified', 'type-level + render-time + vocabulary scan'],
-  ['P13', 'Log scrubbing + tracing', 'verified', 'one documented limitation; spans ship to a real OTLP collector, redacted on the wire'],
+  ['P13', 'Log scrubbing + tracing', 'partial', 'scrubber NOW IN THE LOG PATH (was tested but uncalled) - proven over real HTTP + negative control; spans redacted on the wire to a real OTLP collector; no Sentry SDK exists, so the gate\'s Sentry half is untestable'],
   ['P14.1', 'No standing production access', 'blocked', 'no production'],
   ['P14.2', 'Vulnerable dependency blocks build', 'verified', 'planted minimist@1.2.5, audit went red by advisory id, tree restored'],
   ['P14.3', 'Edge protection, headers grade A', 'partial', 'CSP+headers set and asserted on both apps; Cloudflare WAF/ratelimit unconfigured'],

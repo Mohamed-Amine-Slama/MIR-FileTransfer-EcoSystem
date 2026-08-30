@@ -142,7 +142,7 @@ Cross-region replication was not exercised at all. **P2.4 stays blocked.**
 | Pen test complete, high/critical remediated | 🔒 **open** | Not commissioned. **Spec: do not onboard real patients before this** |
 | Secret scanning enforced in CI | ✅ | gitleaks; proven to catch planted AWS/GitHub/Orthanc credentials |
 | Dependency scanning enforced in CI | ✅ | `pnpm scan:verify` plants minimist@1.2.5 (GHSA-xvch-5gv4-984h), asserts audit goes red **by advisory id**, restores the tree byte-for-byte |
-| Log scrubbing verified with real sensitive payloads | ✅ | 16 tests; patient name + JWT stripped from logs and Sentry payloads. One **documented limitation** below |
+| Log scrubbing verified with real sensitive payloads | ✅ | Scrubber **now actually in the log path** — an error raised over real HTTP logs its phone/JWT/email redacted; proven by negative control. One **documented limitation** below |
 | Audit log immutability verified | ✅ | UPDATE and DELETE both denied to `mir_app`; row survives both |
 | Security headers set and asserted | ⚠️ **partial** | CSP, HSTS, Permissions-Policy, COOP/CORP on both apps, asserted by directive in 6 API + 3 browser tests. **`script-src 'unsafe-inline'` remains** — see below. Cloudflare WAF/rate limiting/bot protection unconfigured |
 
@@ -159,11 +159,33 @@ assignment, no `eval` and no `new Function`, and that claim is enforced by a
 test (`apps/web/lib/security/xss-surface.test.ts`) rather than left in a
 comment.
 
-**Log-scrubbing limitation, stated plainly:** a patient name appearing *only*
-in free text, with no accompanying field to learn it from, is **not** scrubbed.
-Names have no detectable shape. The mitigation is not to interpolate patient
-data into messages; the limitation is recorded as a passing test so nobody
-mistakes it for coverage.
+**The scrubber was not wired in, and this is how that was found.** The 16 unit
+tests were green and testing the right function. Nothing called it: neither
+`formatLogLine` nor `sentryBeforeSend` had a single non-test caller, and the
+API ran on Nest's default console logger, so `GlobalExceptionFilter` printed
+exception messages verbatim. The evidence was in the CI output the whole time —
+the suite's own log lines showed a patient name in full — and was read as test
+noise. Same failure shape as `configure-mfa.sh`: correct code, never reached.
+
+Fixed by routing at the sink (`ScrubbingLogger`, installed in `main.ts` with
+`bufferLogs` so framework startup lines cannot escape first) rather than at
+each call site, so a log call written by someone who has never read PHASE 13
+still gets scrubbed. `scrubbing-logger.test.ts` raises an error through a real
+HTTP request and asserts the phone, JWT and email do not reach the sink; a
+**negative control** in the same file removes the logger and shows all three
+leaking, so a green run means something.
+
+**Two limitations remain, stated plainly:**
+
+- A patient name appearing *only* in free text, with no accompanying field to
+  learn it from, is **not** scrubbed. Names have no detectable shape. The
+  mitigation is not to interpolate patient data into messages; the limitation
+  is recorded as a passing test so nobody mistakes it for coverage.
+- **There is no Sentry.** The `sentryBeforeSend` hook is written and tested,
+  but no Sentry SDK is installed and no DSN is configured, so the gate's
+  "confirm neither appears in Sentry" half is **untestable here** — not passed.
+  Earlier wording in this file claimed Sentry payloads were covered. They are
+  not; there is nothing to cover yet.
 
 ---
 
@@ -208,7 +230,7 @@ above supports.
 | P10 Scheduling | ✅ |
 | P11 Payments | ✅ code; **rail viability unresolved (L7/D2a)** |
 | P12 Notifications | ✅ templates + guard; no delivery provider wired |
-| P13 Observability | ✅ scrubbing + tracing; spans ship to a real OTLP collector and arrive redacted (verified 2026-08-29) |
+| P13 Observability | ⚠️ scrubber now in the log path and proven there; spans ship to a real OTLP collector and arrive redacted (2026-08-29); **no Sentry SDK**, so the gate's Sentry half is untestable |
 | P14 Hardening | ⚠️ threat model + dep scanning written; **no pen test**, no edge config |
 | P15 Resilience | ⚠️ restore drill + IR query walkthrough executed; region-failure drill and live tabletop outstanding |
 | P16 This checklist | ✅ |
