@@ -9,6 +9,9 @@ import { DatabaseModule } from './shared/db/database.module';
 import { GlobalExceptionFilter } from './shared/errors/global-exception.filter';
 import { SecurityHeadersMiddleware } from './shared/http/security-headers.middleware';
 import { EventsModule } from './shared/events/events.module';
+import { RateLimitModule } from './shared/ratelimit/rate-limit.module';
+import { TracingModule } from './shared/observability/tracing.module';
+import { RateLimitGuard } from './shared/ratelimit/rate-limit.guard';
 import { AuditModule } from './modules/audit';
 import { BillingModule } from './modules/billing';
 import { ConsentModule } from './modules/consent';
@@ -31,6 +34,8 @@ import { SchedulingModule } from './modules/scheduling';
     ConfigModule,
     DatabaseModule,
     EventsModule,
+    RateLimitModule,
+    TracingModule,
     // Needed by the P1.5 bootstrap audit to enumerate every registered route.
     DiscoveryModule,
     HealthModule,
@@ -48,6 +53,10 @@ import { SchedulingModule } from './modules/scheduling';
     // Global by default: an undeclared route is unreachable, and P1.5 refuses
     // to boot if one exists at all.
     { provide: APP_GUARD, useClass: AuthGuard },
+    // P4.5 — registered AFTER AuthGuard so the request context already carries
+    // a verified userId and the limiter keys on the account, not on a rotatable
+    // IP. Only routes marked with @RateLimit are throttled.
+    { provide: APP_GUARD, useClass: RateLimitGuard },
     // §6: no stack traces, no SQL, no internal identifiers in any response.
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
   ],

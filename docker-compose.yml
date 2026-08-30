@@ -210,6 +210,9 @@ services:
       DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
 
       REDIS_URL: redis://redis:6379
+      # P13 — the otel-collector service below has always existed; until
+      # now nothing pointed the API at it and the app emitted no spans.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
 
       # These two URLs differ ON PURPOSE, and the config schema keeps them
       # separate precisely so they can.

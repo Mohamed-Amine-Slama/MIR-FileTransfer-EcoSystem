@@ -16,6 +16,7 @@
     "boundaries": "depcruise --config .dependency-cruiser.cjs apps/api/src",
     "boundaries:verify": "node scripts/verify-boundary-enforcement.mjs",
     "scan:verify": "node scripts/verify-dependency-scanning.mjs",
+    "scan:unwired": "node scripts/find-unwired.mjs",
     "verify:mfa": "node scripts/verify-keycloak-mfa.mjs",
     "drill:restore": "node scripts/drill-restore.mjs",
     "verify:object-lock": "node scripts/verify-object-lock.mjs",

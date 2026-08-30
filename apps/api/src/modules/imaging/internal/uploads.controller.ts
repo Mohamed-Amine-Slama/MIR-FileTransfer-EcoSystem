@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { z } from 'zod';
+import { RateLimit } from '../../../shared/ratelimit/rate-limit.guard';
 import { RequiresRole } from '../../../shared/authz/access-metadata';
 import { UploadService, type FileUploadState } from './upload.service';
 
@@ -53,6 +54,9 @@ export class UploadsController {
   constructor(private readonly uploads: UploadService) {}
 
   @RequiresRole('libya_doctor')
+  // Abuse protection only — the budget (60/min) is far above any real clinic
+  // workflow. Throttling a doctor mid-referral is its own kind of harm (P4.5).
+  @RateLimit('uploadInit')
   @Post()
   async createSession(@Body() body: unknown): Promise<{ sessionId: string; expiresAt: string }> {
     const parsed = createSessionSchema.safeParse(body);

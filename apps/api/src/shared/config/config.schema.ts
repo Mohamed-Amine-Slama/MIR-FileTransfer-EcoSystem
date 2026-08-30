@@ -53,6 +53,18 @@ export const configSchema = z.object({
     'REDIS_URL must be a redis:// or rediss:// connection string',
   ),
 
+  // --- observability (P13) -------------------------------------------------
+  // OPTIONAL by design. Unset means spans are built and dropped rather than
+  // exported, so a developer with no collector running is not blocked and a
+  // deployment with no endpoint configured degrades to silence instead of
+  // failing every request on a dead exporter. The trade is that a missing
+  // endpoint in production is invisible; alerting on span volume is the
+  // detection for that, and it is not built (P4.5 has no delivery channel).
+  OTEL_EXPORTER_OTLP_ENDPOINT: z
+    .string()
+    .url('OTEL_EXPORTER_OTLP_ENDPOINT must be a URL')
+    .optional(),
+
   // --- identity (P4.1) -----------------------------------------------------
   KEYCLOAK_ISSUER_URL: z.string().url('KEYCLOAK_ISSUER_URL must be a URL'),
   KEYCLOAK_AUDIENCE: nonEmpty('KEYCLOAK_AUDIENCE'),

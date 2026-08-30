@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
+import { RateLimit } from '../../../shared/ratelimit/rate-limit.guard';
 import { RequiresRole } from '../../../shared/authz/access-metadata';
 import { PatientsService, type CreatePatientResult } from './patients.service';
 import type { PatientCandidate } from './patient-matching';
@@ -79,6 +80,13 @@ export class PatientsController {
    * patient's claim credential.
    */
   @RequiresRole('libya_doctor')
+  // Each call sends an SMS. Unthrottled, this is a billing attack and a way to
+  // train a patient to ignore their claim messages (P4.5).
+  //
+  // Keyed on the PATIENT, not the doctor: the budget protects one phone from
+  // being bombed. Keyed on the doctor it would throttle a clinic legitimately
+  // onboarding four patients in a morning.
+  @RateLimit('otpRequest', { keyBy: 'param:id' })
   @Post(':id/claim-token')
   @HttpCode(202)
   async issueClaimToken(
@@ -90,6 +98,11 @@ export class PatientsController {
 
   /** Redeem a claim code as the authenticated patient (P5.2). */
   @RequiresRole('patient')
+  // Six digits is a million possibilities. `patients_claim_with_token` already
+  // binds redemption to the caller's own phone, so a guess cannot take someone
+  // else's record — this bounds the guessing itself rather than relying on
+  // that single control (ADR-6, defence in depth).
+  @RateLimit('login')
   @Post('claim')
   @HttpCode(200)
   async claim(@Body() body: unknown): Promise<{ patientId: string }> {

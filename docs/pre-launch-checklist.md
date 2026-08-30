@@ -146,6 +146,38 @@ Cross-region replication was not exercised at all. **P2.4 stays blocked.**
 | Audit log immutability verified | ✅ | UPDATE and DELETE both denied to `mir_app`; row survives both |
 | Security headers set and asserted | ⚠️ **partial** | CSP, HSTS, Permissions-Policy, COOP/CORP on both apps, asserted by directive in 6 API + 3 browser tests. **`script-src 'unsafe-inline'` remains** — see below. Cloudflare WAF/rate limiting/bot protection unconfigured |
 
+**Rate limiting — what was actually wrong.** `rate-limiter.ts` was written and
+tested and referenced by nothing outside its own test, so **the API applied no
+rate limiting to any route**. The ledger said "logic tested; no alert
+delivery", which reads as *the limiter works, the alerting does not* — the
+limiter was not in the request path at all. The intent was even visible in
+neighbouring code: `PatientsController` validates claim-token shape early "so a
+400 is returned for obvious junk without consuming rate-limit budget". There
+was no budget.
+
+Now enforced over real HTTP on the three abuse-prone routes, opt-in per route
+so no clinical read path is throttled:
+
+| Route | Budget | Keyed on |
+|---|---|---|
+| `POST /patients/:id/claim-token` | 3 / 15 min | **the patient** |
+| `POST /patients/claim` | 5 / 5 min | the caller |
+| `POST /uploads` | 60 / min | the caller |
+
+The claim-token budget is keyed on the **patient, not the doctor**, and that
+distinction was a bug in the first version of this work: keyed on the doctor, a
+clinic onboarding a fourth patient in a morning is refused — legitimate work
+denied by a control meant to stop phone bombing. Asserted by a test that
+exhausts one target and confirms a second is unaffected.
+
+**Two limits that are yours to close before deploying:** the store is in
+memory, so N replicas permit N times the rate and a deploy clears every
+lockout — `REDIS_URL` and a `redis` service already exist but no client is
+installed, and a distributed store should not be invented speculatively for a
+deployment that does not exist. And the anomaly sweep (`ANOMALY_SWEEP_SQL`) has
+no scheduler and no alert channel, because there is no on-call rotation to
+route to.
+
 **CSP limitation, stated plainly:** `script-src` carries `'unsafe-inline'`.
 Next's App Router streams RSC payloads through inline `<script>` tags, and
 without it the application does not hydrate at all — verified, not assumed: the
@@ -230,21 +262,74 @@ above supports.
 | P10 Scheduling | ✅ |
 | P11 Payments | ✅ code; **rail viability unresolved (L7/D2a)** |
 | P12 Notifications | ✅ templates + guard; no delivery provider wired |
-| P13 Observability | ⚠️ scrubber now in the log path and proven there; spans ship to a real OTLP collector and arrive redacted (2026-08-29); **no Sentry SDK**, so the gate's Sentry half is untestable |
-| P14 Hardening | ⚠️ threat model + dep scanning written; **no pen test**, no edge config |
+| P13 Observability | ⚠️ scrubber now in the log path AND tracer now emitting spans — both were tested but uncalled; **no Sentry SDK**, so the gate's Sentry half is untestable |
+| P14 Hardening | ⚠️ threat model + dep scanning; rate limiting now enforced in-app; **no pen test**, no edge config |
 | P15 Resilience | ⚠️ restore drill + IR query walkthrough executed; region-failure drill and live tabletop outstanding |
 | P16 This checklist | ✅ |
 
 ---
 
-## The five things to do first
+## What is left, and who can do it
 
-1. **Get L1 answered.** If the transfer is not lawful, nothing else matters.
-2. **Run the P2.4 Object Lock probe.** It is the one gate the spec singles out,
-   and it cannot be inferred from reading Terraform.
-3. **Commission the penetration test**, focused on authorization boundaries
-   between doctors and between patients.
-4. **Resolve the Stripe entity question (D2a/L7)** before building any more on
-   that assumption.
-5. **Run the tabletop and one restore drill.** Both are cheap and both
-   routinely reveal that a documented procedure does not work.
+Nothing below can be closed from inside this repository. Each needs an account,
+a signature, a person, or a decision.
+
+### Blocks launch outright
+
+1. **Get L1 answered.** If the cross-border transfer is not lawful, nothing
+   else matters. L2–L8 follow it.
+2. **Commission the penetration test**, focused on authorization boundaries
+   between doctors and between patients. The spec is explicit: do not onboard
+   real patients before it.
+3. **Sign the DPA with AWS, and SCCs with every Tunisian doctor or clinic.**
+   Tunisia has no adequacy decision, so a Tunisian doctor viewing EU-hosted
+   data is a Chapter V restricted transfer. `verified_at` is the product gate.
+
+### Needs an AWS account, then one command each
+
+4. **Run the P2.4 Object Lock probe** — `pnpm verify:object-lock`. The one gate
+   the spec singles out. Written and runnable; LocalStack proved its mechanics
+   but cannot prove the delete is refused *by the lock* rather than by a bucket
+   policy, which is the entire question.
+5. **Measure managed RDS PITR** (P2.5). The 123 s figure in `dr.md` is a
+   single-node local basebackup and must never be quoted as the RDS number.
+6. **Set a real Object Lock retention period** to match L5 before applying any
+   Terraform. Compliance mode is **irreversible** — a guess is permanent.
+
+### Needs a decision from you, then is straightforward
+
+7. **Swap the rate-limit store to Redis** before running more than one API
+   replica. In-memory buckets mean N replicas permit N times the rate and a
+   deploy clears every lockout. `REDIS_URL` and the `redis` service already
+   exist; no client is installed.
+8. **Choose an alerting destination and an on-call rotation.** The anomaly
+   sweep SQL and the detection logic exist; there is nowhere to send a page, so
+   P4.5 stays partial. Detection without delivery is not alerting.
+9. **Decide on Sentry.** The `sentryBeforeSend` scrubbing hook is written and
+   tested, but no SDK is installed, so half of the P13 gate has nothing to test
+   against.
+10. **Write the terms of service**, stating the platform is not a diagnostic
+    tool. The viewer banner is built and tested; the wording is not, and it is
+    counsel's, not mine.
+
+### Cheap, and routinely finds real problems
+
+11. **Run the live multi-person incident tabletop.** The forensic queries were
+    executed against seeded data and four gaps were found and fixed, but a
+    walkthrough by one person is not the exercise.
+12. **Run one region-failure drill (P15.2)** with an operator who did not write
+    the runbook. That constraint is the point of it.
+
+---
+
+## A note on how the last defects were found
+
+Six of the seven defects fixed in this repository recently were the same shape:
+**correct, well-tested code that nothing called.** A green suite proves a
+function works; it cannot prove the application reaches it, because the tests
+are themselves the references that make it look used.
+
+`pnpm scan:unwired` lists exports referenced only by tests. It is a review aid,
+not a gate — test doubles and harnesses show up legitimately — but a security
+control in its output is a defect until proven otherwise. It is worth reading
+before trusting any ✅ in this document.
