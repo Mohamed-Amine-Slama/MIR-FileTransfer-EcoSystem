@@ -2,10 +2,17 @@
 
 **BUILD_SPEC P15.3.**
 
-> **Status: written, NOT exercised.** P15.3 requires a tabletop exercise of a
-> suspected unauthorized access to one patient's study, with gaps logged and
-> fixed. That has not happened. A runbook nobody has walked through is a
-> document, not a capability.
+> **Status: exercised 2026-08-29 against seeded data. A live multi-person
+> tabletop is still outstanding.**
+>
+> Every forensic query in section 1 was executed rather than read, and four
+> gaps were found and fixed — including one that returned an EMPTY AUDIT LOG
+> instead of an error, which during an investigation reads as "nothing
+> happened". See the exercise record at the end of this document.
+>
+> What is still untested is the human half: whether a team under pressure finds
+> this document, preserves evidence before containing, and reaches counsel
+> inside the 72-hour clock.
 
 ---
 
@@ -84,6 +91,9 @@ In this order:
    outage to every doctor mid-consultation.
 4. If the application role itself is suspect, revoke its login:
    `ALTER ROLE mir_app NOLOGIN;` — this is a full outage. SEV-1 only.
+   **Requires a superuser/CREATEROLE connection.** `mir_app` cannot disable
+   itself (`permission denied to alter role`) — verified during the 2026-08-29
+   exercise. Have that connection to hand BEFORE you need it.
 
 ### 3. Assess scope (20 min)
 
@@ -194,16 +204,100 @@ system that let one click reach patient imaging is.
 
 ---
 
-## Tabletop exercise (P15.3 — REQUIRED, NOT DONE)
+## Tabletop exercise (P15.3)
 
-Run this scenario with the team, timed:
+### The scenario
 
 > A Tunisian doctor reports that a colleague mentioned details of a patient
-> the colleague has no appointment with. The colleague's account shows 60
-> `StudyAccessed` rows in the last week, 45 of them denied.
+> the colleague has no appointment with. The colleague's account shows
+> `StudyAccessed` rows in the last week, most of them denied.
 
-Assess: does the team find the audit query? Do they preserve before
-containing? Do they reach counsel within the SEV-2 window? Who decides
-notification?
+### Exercise record — 2026-08-29
 
-Log every gap. Fix them. Then re-run.
+**Executed**, against a seeded local database reproducing that scenario: one
+`tunisia_doctor` with two legitimate accesses to a consented patient, one
+access to a second patient *after* consent was revoked, and repeated denied
+attempts against two patients they never had an appointment with.
+
+**Every SQL query in section 1 above was run as written**, rather than read.
+That is the point of the exercise: a runbook instructing a responder to
+"identify every study this actor accessed" is worthless if the query it
+supplies returns the wrong rows — or no rows.
+
+**Scope of this exercise, stated plainly:** one engineer against a seeded local
+database. It was NOT a live multi-person exercise, so it says nothing about
+whether the team finds the runbook, reaches counsel inside the SEV-2 window, or
+preserves before containing. Those still need a real tabletop with people in a
+room. What it does establish is that the *mechanics* work.
+
+### Findings, and what changed
+
+| # | Finding | Severity | Fix |
+|---|---|---|---|
+| 1 | The queries use `:actor` / `:patient` placeholders. Pasted into `psql` as written they fail with `syntax error at or near ":"`. Worse, `psql -f file.sql -v actor=...` fails too — variable interpolation only happens for SQL read from stdin or `-c`. | **High** — a responder loses time to a syntax error at exactly the wrong moment | Every query below now carries a runnable invocation |
+| 2 | **The runbook never said which database role to connect as.** Connecting as `mir_app` returns **0 rows from `audit_events`** — RLS filters everything, and the responder sees an *empty table, not an error*. During an investigation that reads as "no unauthorized access occurred". | **Critical** — silently wrong, in the direction that closes an incident that is still open | Role requirement stated explicitly below |
+| 3 | Section 3 asks "Was consent valid for each?" but supplies no query, though the answer decides notification exposure | Medium | Query added below |
+| 4 | Containment step 4 (`ALTER ROLE mir_app NOLOGIN`) cannot be executed by the application role — `permission denied to alter role`. It needs a superuser/CREATEROLE connection the runbook never mentions | Medium — correct security design, undocumented operational dependency | Noted at the step |
+
+Audit immutability was re-confirmed during the exercise: as `mir_app`,
+`DELETE FROM audit_events` returns `permission denied for table audit_events`.
+
+### Connect as the right role — READ THIS FIRST
+
+```bash
+# The investigation connection. NOT mir_app: it is subject to RLS and will
+# return an empty audit log rather than an error (finding 2).
+psql "$DATABASE_MIGRATOR_URL"     # or the break-glass role (P14.1)
+```
+
+### Runnable forms of the section 1 queries
+
+```bash
+# Everything this actor touched. Note: heredoc, not -f — psql only interpolates
+# variables for SQL read from stdin or -c (finding 1).
+psql "$DATABASE_MIGRATOR_URL" -v actor="'<actor-uuid>'" <<'SQL'
+SELECT occurred_at, action, subject_id, patient_id, ip_address, user_agent,
+       metadata->>'granted' AS granted
+FROM audit_events
+WHERE actor_id = :actor
+ORDER BY occurred_at DESC
+LIMIT 500;
+SQL
+```
+
+```bash
+# Scope, in the shape counsel asks for it (§3, §4).
+psql "$DATABASE_MIGRATOR_URL" -v actor="'<actor-uuid>'" <<'SQL'
+SELECT count(DISTINCT patient_id) AS distinct_patients,
+       count(*) FILTER (WHERE metadata->>'granted' = 'true')  AS granted,
+       count(*) FILTER (WHERE metadata->>'granted' = 'false') AS denied,
+       count(*) FILTER (WHERE metadata->>'accessKind' = 'pixels'
+                          AND metadata->>'granted' = 'true')  AS pixels_retrieved
+FROM audit_events WHERE actor_id = :actor;
+SQL
+```
+
+```bash
+# Consent validity per patient, and accesses AFTER revocation (finding 3).
+# An access after revocation is a materially different disclosure from one
+# before it — this is the query that tells counsel which happened.
+psql "$DATABASE_MIGRATOR_URL" -v actor="'<actor-uuid>'" <<'SQL'
+SELECT a.patient_id,
+       count(*) AS accesses,
+       max(c.revoked_at) AS consent_revoked_at,
+       count(*) FILTER (WHERE c.revoked_at IS NOT NULL
+                          AND a.occurred_at > c.revoked_at) AS after_revocation
+FROM audit_events a
+LEFT JOIN consent_records c
+       ON c.patient_id = a.patient_id AND c.granted_to = a.actor_id
+WHERE a.actor_id = :actor
+GROUP BY a.patient_id
+ORDER BY a.patient_id;
+SQL
+```
+
+### Still to do
+
+A **live, multi-person** tabletop. This exercise proved the queries; it did not
+test whether a team under pressure finds this document, preserves evidence
+before containing, or reaches counsel inside the 72-hour clock.

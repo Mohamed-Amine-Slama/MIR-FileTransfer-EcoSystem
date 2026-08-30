@@ -75,6 +75,38 @@ export const corridorSchema = z
 export type Corridor = z.infer<typeof corridorSchema>;
 
 /**
+ * Which role each configured corridor puts on each endpoint.
+ *
+ * WHY THIS IS IN THE CONTRACT AND NOT IN THE WEB APP'S REGISTRY.
+ * The full corridor definition — document requirements, intake fields,
+ * licensing bodies — is presentation configuration and lives with the screens
+ * that render it. The role mapping is not: the API needs it too, at the one
+ * moment that matters most, when a verification decision grants a clinical
+ * role. Two copies of that mapping is how an ops approval ends up granting the
+ * wrong side's role, and no test would catch it because each copy is
+ * self-consistent.
+ *
+ * So the mapping is declared once here and read by both. `resolveSide` above is
+ * its inverse, and `corridorSchema` still carries the roles on the corridor
+ * object so nothing downstream has to consult two sources.
+ */
+export const CORRIDOR_ENDPOINT_ROLES: Record<string, Record<EndpointSide, Role>> = {
+  'ly-tn': { source: 'libya_doctor', destination: 'tunisia_doctor' },
+};
+
+/**
+ * The role a corridor grants on one side, or null if the corridor is unknown.
+ *
+ * Returning null rather than throwing: an organisation row can name a corridor
+ * that has since been retired from configuration, and the honest answer at that
+ * point is "no role", which the caller turns into a refusal to approve. A throw
+ * would take down the whole ops queue over one stale row.
+ */
+export function corridorRoleFor(corridorId: string, side: EndpointSide): Role | null {
+  return CORRIDOR_ENDPOINT_ROLES[corridorId]?.[side] ?? null;
+}
+
+/**
  * The side a role plays on a corridor, or null if it plays none.
  *
  * Patients return null deliberately: the platform's users are organisations

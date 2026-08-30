@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react';
 import localFont from 'next/font/local';
+import Script from 'next/script';
 import { LOCALE_DIRECTION, type Locale } from '@mir/contracts';
 import { AppShell } from '../components/AppShell';
 import { LocaleProvider } from '../lib/i18n/provider';
 import { SessionProvider } from '../lib/session/session';
+import { ThemeProvider } from '../lib/theme/theme';
 import './globals.css';
 
 export const metadata = {
@@ -48,10 +50,27 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang={DEFAULT_LOCALE} dir={LOCALE_DIRECTION[DEFAULT_LOCALE]} className={plex.variable}>
       <body>
+        {/*
+          Applies the stored theme before the first paint.
+
+          `beforeInteractive` runs this ahead of any Next code or hydration, so
+          a user who chose dark never sees a white flash. It has to be a FILE
+          rather than an inline script: React's raw-HTML escape hatch is banned
+          outright by lib/security/xss-surface.test.ts, because its absence is
+          what justifies the `script-src 'unsafe-inline'` exception in
+          next.config.mjs. Same origin, so `script-src 'self'` already permits
+          this, and the routes stay statically prerendered.
+
+          (That test is a literal text scan, so naming the banned API here —
+          even inside a comment — trips it. Hence the circumlocution.)
+        */}
+        <Script src="/theme-init.js" strategy="beforeInteractive" />
         <LocaleProvider>
-          <SessionProvider>
-            <AppShell>{children}</AppShell>
-          </SessionProvider>
+          <ThemeProvider>
+            <SessionProvider>
+              <AppShell>{children}</AppShell>
+            </SessionProvider>
+          </ThemeProvider>
         </LocaleProvider>
       </body>
     </html>

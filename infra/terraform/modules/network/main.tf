@@ -24,6 +24,17 @@ resource "aws_vpc" "this" {
   tags                 = merge(var.tags, { Name = "mir-${var.environment}" })
 }
 
+# The default security group AWS creates with every VPC allows unrestricted
+# traffic between anything that lands in it. Nothing here is placed in it
+# deliberately, but a resource created without an explicit security_group_ids
+# silently gets it — and would then be reachable from every other such
+# resource. Adopting it with NO rules makes that mistake fail closed.
+resource "aws_default_security_group" "this" {
+  vpc_id = aws_vpc.this.id
+  tags   = merge(var.tags, { Name = "mir-${var.environment}-default-DO-NOT-USE" })
+  # No ingress, no egress blocks: everything denied.
+}
+
 # --- public subnets: LOAD BALANCER ONLY --------------------------------------
 resource "aws_subnet" "public" {
   for_each = { for idx, az in var.availability_zones : az => idx }
@@ -116,6 +127,7 @@ resource "aws_route_table_association" "private" {
 
 # The ONLY group with ingress from the internet, and only on 443.
 resource "aws_security_group" "alb" {
+  # checkov:skip=CKV2_AWS_5:Consumed by the compute stack, which does not exist yet -- P2.6 (deploy pipeline) is blocked on there being an AWS account at all. This module exports their ids for that purpose.
   name        = "mir-${var.environment}-alb"
   description = "Public load balancer. 443 only."
   vpc_id      = aws_vpc.this.id
@@ -145,6 +157,7 @@ resource "aws_vpc_security_group_egress_rule" "alb_to_app" {
 }
 
 resource "aws_security_group" "app" {
+  # checkov:skip=CKV2_AWS_5:Consumed by the compute stack, which does not exist yet -- P2.6 (deploy pipeline) is blocked on there being an AWS account at all. This module exports their ids for that purpose.
   name        = "mir-${var.environment}-app"
   description = "API. Private subnets only."
   vpc_id      = aws_vpc.this.id
@@ -171,6 +184,7 @@ resource "aws_vpc_security_group_egress_rule" "app_https_out" {
 
 resource "aws_vpc_security_group_egress_rule" "app_to_db" {
   security_group_id            = aws_security_group.app.id
+  description                  = "PostgreSQL to the database security group only"
   referenced_security_group_id = aws_security_group.database.id
   from_port                    = 5432
   to_port                      = 5432
@@ -179,6 +193,7 @@ resource "aws_vpc_security_group_egress_rule" "app_to_db" {
 
 resource "aws_vpc_security_group_egress_rule" "app_to_orthanc" {
   security_group_id            = aws_security_group.app.id
+  description                  = "DICOMweb to the Orthanc security group only (P8.1)"
   referenced_security_group_id = aws_security_group.orthanc.id
   from_port                    = 8042
   to_port                      = 8042
@@ -187,6 +202,7 @@ resource "aws_vpc_security_group_egress_rule" "app_to_orthanc" {
 
 # --- database: reachable ONLY from the app -----------------------------------
 resource "aws_security_group" "database" {
+  # checkov:skip=CKV2_AWS_5:Consumed by the compute stack, which does not exist yet -- P2.6 (deploy pipeline) is blocked on there being an AWS account at all. This module exports their ids for that purpose.
   name        = "mir-${var.environment}-db"
   description = "PostgreSQL. No internet route, no public ingress."
   vpc_id      = aws_vpc.this.id
@@ -205,6 +221,7 @@ resource "aws_vpc_security_group_ingress_rule" "db_from_app" {
 
 # --- Orthanc: reachable ONLY from the app (P8.1) -----------------------------
 resource "aws_security_group" "orthanc" {
+  # checkov:skip=CKV2_AWS_5:Consumed by the compute stack, which does not exist yet -- P2.6 (deploy pipeline) is blocked on there being an AWS account at all. This module exports their ids for that purpose.
   name        = "mir-${var.environment}-orthanc"
   description = "Orthanc DICOM server. Reachable only from the API."
   vpc_id      = aws_vpc.this.id

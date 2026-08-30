@@ -2,11 +2,14 @@
 
 **BUILD_SPEC P2.5, P15.1, P15.2.**
 
-> **Status: written, NOT exercised. RTO and RPO are UNMEASURED.**
+> **Status: partially exercised (2026-08-29). Managed-RDS RTO/RPO remain
+> UNMEASURED.**
 >
-> Every number below is a *target*, not an observed value. P2.5 requires the
-> observed RTO to be recorded here after a real restore; P15.1 requires the
-> drill quarterly. Until someone runs it, this document states intentions.
+> A **local** restore drill has now been run — `pnpm drill:restore`, results in
+> the next section — so the procedure and the integrity assertions are no
+> longer merely intentions. Everything requiring AWS is still untested: failover
+> (P2.5), managed PITR, and region loss (P15.2) have never been exercised, and
+> every number for those is a *target*, not an observed value.
 >
 > "An untested backup fails at exactly the wrong moment."
 
@@ -17,12 +20,41 @@
 | Scenario | Target RTO | Target RPO | **Measured** |
 |---|---|---|---|
 | Database failover (AZ loss) | < 2 min | 0 | ⬜ not measured |
-| PITR restore | < 2 h | < 5 min | ⬜ not measured |
+| PITR restore (managed RDS) | < 2 h | < 5 min | ⬜ **not measured** |
+| Local basebackup restore | — | — | 🏠 **123.2 s** (2026-08-29, see below) |
 | Region loss — imaging readable | < 4 h | < 15 min | ⬜ not measured |
 | Full region rebuild | < 24 h | < 15 min | ⬜ not measured |
 
 **Do not quote these to a customer or a regulator until the Measured column is
 filled in.**
+
+### Local restore drill — executed 2026-08-29 (P15.1)
+
+`pnpm drill:restore` seeds a known manifest, takes a `pg_basebackup`, restores
+into a scratch container, and verifies integrity. Observed on that run:
+
+| | |
+|---|---|
+| Backup | 51.2 s |
+| Restore to accepting connections (**RTO**) | **123.2 s** |
+| Dataset | 3 patients, 6 studies, 18 instances |
+| Orphaned instances after restore | 0 |
+| Dangling appointment-study links | 0 |
+| Booking exclusion constraint | survived |
+| RLS on every patient-data table | still enabled |
+| Seeded instances still mapped to the right patient **and** checksum | 18 / 18 |
+
+**That 123.2 s is a single-node `pg_basebackup` restore into a local container
+on developer hardware, against a dataset of 18 instances. It is NOT the managed
+RDS point-in-time-recovery figure P2.5 requires and must never be quoted as
+one** — managed PITR replays WAL across a far larger dataset and will be
+substantially slower. P2.5 remains blocked.
+
+What the drill does establish is that the *procedure* works and that the
+integrity properties survive a restore — including the two that would fail
+silently: the `scheduling_appointments` exclusion constraint (the double-booking
+guarantee, P10.2) and row-level security (ADR-6). A restore that quietly
+dropped either would look completely healthy.
 
 ---
 
@@ -158,7 +190,8 @@ replication, not a DNS flip.
 
 | Date | Scenario | Operator | RTO | RPO | Gaps |
 |---|---|---|---|---|---|
-| ⬜ | | | | | |
+| 2026-08-29 | Local basebackup → scratch container | automated (`pnpm drill:restore`) | 123.2 s | n/a (offline copy) | Two, both fixed in the script: postgres runs as PID 1 so stopping it to swap the data directory kills the container; and `/var/lib/postgresql/data` is a declared VOLUME that cannot be removed from inside, so the restore must target a different path. Both would have cost an operator time during a real incident. |
+| ⬜ | Managed RDS PITR | | | | needs an AWS account |
 
 Rules:
 - The operator **must not be the person who wrote this runbook** (P15.2).

@@ -35,7 +35,6 @@ const ALLOWED = new Set([
   'app/patients/new/page.tsx',
   'app/patients/page.tsx',
   'app/upload/page.tsx',
-  'components/AppShell.tsx',
 ]);
 
 const FORBIDDEN = /\b(libya_doctor|tunisia_doctor|Libya|Tunisia|Libye|Tunisie)\b/;

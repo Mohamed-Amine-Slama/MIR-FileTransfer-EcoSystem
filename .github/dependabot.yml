@@ -55,6 +55,32 @@ updates:
       - dependency-name: "sharp"
         update-types: ["version-update:semver-major"]
 
+      # Majeures exclues pour les paquets qui portent une garantie du système.
+      #
+      # Le 2026-08-29, zod 3->4, vitest 3->4, dotenv 16->17 et Cornerstone 3->5
+      # ont été fusionnées le même après-midi ; l'arbre ne compilait plus
+      # (132 erreurs de typage) et la CI de la branche était rouge. zod 4 a
+      # changé la sémantique de `.default()` sur un schéma de configuration qui
+      # porte les durées de rétention et la durée de vie des URLs signées ;
+      # Cornerstone 5 a introduit une dépendance transitive avec un avis HIGH
+      # (adm-zip GHSA-xcpc-8h2w-3j85).
+      #
+      # Ces montées doivent être faites délibérément, avec la suite complète et
+      # `pnpm verify:gates` relus, pas fusionnées automatiquement. Les mineures
+      # et correctifs continuent d'arriver normalement.
+      - dependency-name: "zod"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@cornerstonejs/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@nestjs/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "pg"
+        update-types: ["version-update:semver-major"]
+
   # --- GitHub Actions ---------------------------------------------------------
   - package-ecosystem: "github-actions"
     directory: "/"

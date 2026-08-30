@@ -63,6 +63,9 @@ resource "aws_kms_alias" "this" {
 data "aws_caller_identity" "current" {}
 
 data "aws_iam_policy_document" "key_policy" {
+  # checkov:skip=CKV_AWS_109:A KMS KEY POLICY's resource is the key it is attached to. "*" here means "this key", not "every key" -- there is no narrower form to write.
+  # checkov:skip=CKV_AWS_111:Same. Key administration is scoped to the account root by the statement below, which is the documented way to keep a key manageable.
+  # checkov:skip=CKV_AWS_356:Same -- "*" is self-referential within a key policy.
   for_each = local.keys
 
   # Root retains administrative control; without this the key can become

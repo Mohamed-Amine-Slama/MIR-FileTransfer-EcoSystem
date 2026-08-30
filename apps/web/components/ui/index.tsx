@@ -37,6 +37,15 @@ export {
   DropdownMenuTrigger,
 } from './dropdown-menu';
 export { Sheet, SheetClose, SheetContent, SheetTrigger } from './sheet';
+export { OtpInput, OTP_LENGTH } from './otp-input';
+export { Switch } from './switch';
+export { Segmented, type SegmentedOption } from './segmented';
+export { Avatar, initialsOf } from './avatar';
+export { Separator } from './separator';
+export { Meter } from './meter';
+export { StatTile, StatGrid, SectionHeading } from './stat';
+export { TabNav, type TabItem } from './tab-nav';
+export { Dropzone } from './dropzone';
 
 // ---------------------------------------------------------------------------
 

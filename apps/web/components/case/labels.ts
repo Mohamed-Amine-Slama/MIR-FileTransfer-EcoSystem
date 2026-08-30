@@ -8,8 +8,10 @@ import {
   type Money,
   type PaymentStatus,
   type ProviderKind,
+  type Role,
   type VerificationStatus,
 } from '@mir/contracts';
+import { sideForRole } from '../../lib/corridor/registry';
 import type { Dictionary } from '../../lib/i18n/dictionary';
 
 /**
@@ -62,6 +64,34 @@ export function sideLabel(t: Dictionary, side: CaseSide): string {
     ops: t.sideOps,
   };
   return labels[side];
+}
+
+/**
+ * What to call the signed-in user's role.
+ *
+ * NAMED BY CORRIDOR SIDE, NOT BY ROLE (§4.3). The obvious implementation is an
+ * exhaustive `Record<Role, string>` mapping each country-specific role to a
+ * label naming its country, and that is what this replaced. It read better and
+ * it was wrong the moment a second corridor existed: a referrer in a newly
+ * configured corridor would have been greeted by the first corridor's country
+ * name, and the fix would have been a sweep rather than a config entry.
+ *
+ * Two roles play no corridor side and are named directly. `patient` is not a
+ * party to a referral at all (see `resolveSide`), and `applicant` has not been
+ * granted a side yet — that is the whole meaning of the role.
+ */
+export function roleLabel(t: Dictionary, role: Role): string {
+  const direct: Partial<Record<Role, string>> = {
+    patient: t.rolePatient,
+    applicant: t.roleApplicant,
+  };
+  const named = direct[role];
+  if (named !== undefined) return named;
+
+  const side = sideForRole(role);
+  // Only reachable for a role no configured corridor plays, which is a
+  // configuration error rather than a state to invent a label for.
+  return side === null ? t.none : sideLabel(t, side);
 }
 
 export function verificationLabel(t: Dictionary, status: VerificationStatus): string {

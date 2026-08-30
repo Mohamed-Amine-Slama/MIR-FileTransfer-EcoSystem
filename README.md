@@ -115,8 +115,19 @@ PostgreSQL; the queue survives a browser kill and resumes with no user action.
 ## Testing
 
 ```bash
-pnpm test              # 232 API + 18 dicom-utils + 3 contracts
-pnpm --filter @mir/web test:e2e   # 20 browser tests, desktop + mobile
+pnpm test              # 260 API + 18 dicom-utils + 90 web + 3 contracts
+pnpm --filter @mir/web test:e2e   # 52 browser tests, desktop + mobile
+```
+
+Verification commands that prove a guard still works, rather than that the tree
+currently passes it:
+
+```bash
+pnpm boundaries:verify   # plants module-boundary violations, asserts they fail
+pnpm scan:verify         # plants a vulnerable dependency, asserts audit goes red
+pnpm verify:mfa          # doctor without TOTP cannot log in (needs Keycloak)
+pnpm drill:restore       # backup -> scratch restore, integrity verified
+pnpm verify:object-lock  # P2.4 probe (needs real AWS credentials)
 ```
 
 The tests that matter most:
@@ -128,6 +139,7 @@ The tests that matter most:
 | Browser-kill resume | `apps/web/e2e/upload-resume.spec.ts` |
 | 50-concurrent booking | `apps/api/src/modules/scheduling/scheduling.test.ts` |
 | Log scrubbing | `apps/api/src/shared/observability/log-scrubber.test.ts` |
+| Severed-TCP upload resume | `apps/api/src/modules/imaging/upload-severed.test.ts` |
 
 ## Known gaps
 
@@ -139,9 +151,12 @@ Beyond the legal and infrastructure blockers above:
   The load ordering and safe degradation are covered by e2e tests, but an
   actual 16-bit frame has never been rendered end-to-end — that needs Orthanc
   serving real WADO-RS frames.
-- **No trace collector is wired.** Span creation, naming and redaction are
-  implemented and tested (API → DB → Orthanc → S3 under one trace id); the
-  exporter writes JSON rather than shipping to an OTLP endpoint.
+- **The CSP carries `script-src 'unsafe-inline'`.** Next's App Router streams
+  RSC payloads through inline scripts, and these routes are statically
+  prerendered so a per-request nonce cannot reach them. Removing it means
+  forcing dynamic rendering app-wide. The app contains no
+  `dangerouslySetInnerHTML`, `innerHTML`, `eval` or `new Function`, and that
+  claim is enforced by a test rather than a comment.
 - **No notification delivery provider** is wired. Templates and the
   no-clinical-data guarantee are built and tested.
 - **A patient name in free-text logs cannot be scrubbed** when there is no

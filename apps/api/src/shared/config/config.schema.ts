@@ -53,10 +53,53 @@ export const configSchema = z.object({
     'REDIS_URL must be a redis:// or rediss:// connection string',
   ),
 
+  // --- observability (P13) -------------------------------------------------
+  // OPTIONAL by design. Unset means spans are built and dropped rather than
+  // exported, so a developer with no collector running is not blocked and a
+  // deployment with no endpoint configured degrades to silence instead of
+  // failing every request on a dead exporter. The trade is that a missing
+  // endpoint in production is invisible; alerting on span volume is the
+  // detection for that, and it is not built (P4.5 has no delivery channel).
+  OTEL_EXPORTER_OTLP_ENDPOINT: z
+    .string()
+    .url('OTEL_EXPORTER_OTLP_ENDPOINT must be a URL')
+    .optional(),
+
   // --- identity (P4.1) -----------------------------------------------------
   KEYCLOAK_ISSUER_URL: z.string().url('KEYCLOAK_ISSUER_URL must be a URL'),
   KEYCLOAK_AUDIENCE: nonEmpty('KEYCLOAK_AUDIENCE'),
   KEYCLOAK_JWKS_URL: z.string().url('KEYCLOAK_JWKS_URL must be a URL'),
+
+  /**
+   * Service-account credentials for Keycloak's admin API, used ONLY by
+   * self-service registration (brief §5.1): creating the Keycloak user is what
+   * makes a password exist, and ADR-2 keeps passwords entirely on that side.
+   *
+   * OPTIONAL, and deliberately so. Most deployments of this application
+   * provision accounts out of band and want no admin credential in the API's
+   * environment at all — a client that can create users is the single most
+   * valuable secret here. When it is absent, /auth/register answers 501, the
+   * same honest refusal apps/web/app/auth/password-login/route.ts already gives
+   * for an unconfigured token endpoint. It never degrades to creating a local
+   * account with a password this service invented.
+   */
+  KEYCLOAK_ADMIN_CLIENT_ID: z.string().min(1).optional(),
+  KEYCLOAK_ADMIN_CLIENT_SECRET: z.string().min(1).optional(),
+  /** Realm to administer. Derived from the issuer when unset. */
+  KEYCLOAK_REALM: z.string().min(1).optional(),
+
+  // --- outbound mail (§5.1) ------------------------------------------------
+  // Optional for the same reason: no adapter is wired, and MailModule refuses
+  // to boot outside development rather than pretending to send.
+  MAIL_FROM: z.string().email('MAIL_FROM must be an email address').optional(),
+
+  /**
+   * Public origin of the web app, for links inside outbound mail (seat
+   * invitations). Not derived from the request: a Host header is
+   * attacker-controlled, and a link built from one is a redirect to wherever
+   * the attacker asked.
+   */
+  APP_PUBLIC_URL: z.string().url('APP_PUBLIC_URL must be a URL').optional(),
 
   // --- object storage (P2.4) ----------------------------------------------
   AWS_REGION: nonEmpty('AWS_REGION'),

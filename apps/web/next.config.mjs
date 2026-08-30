@@ -98,27 +98,46 @@ const nextConfig = {
            * Content Security Policy.
            *
            * Built against what this app actually loads, not copied from a
-           * template. Two directives are load-bearing for the viewer and must
-           * not be tightened without re-running `viewer.spec.ts`:
+           * template. Three directives are load-bearing and must not be
+           * tightened without re-running the viewer e2e suite:
            *
            * - `'wasm-unsafe-eval'` — Cornerstone's HTJ2K/JPEG decoders are
            *   WebAssembly. This token permits WASM compilation and NOTHING
            *   else; it is specifically not `'unsafe-eval'`, which would also
-           *   permit eval() of JavaScript.
+           *   permit evaluating JavaScript from a string.
            * - `worker-src blob:` — the DICOM image loader decodes frames in
-           *   web workers created from blob URLs, and `img-src blob:` because
-           *   decoded frames are handed to the canvas the same way.
+           *   workers created from blob URLs.
+           * - `img-src blob:` — decoded frames reach the canvas the same way.
            *
-           * `style-src 'unsafe-inline'` is Next's critical-CSS injection. It
-           * is the one genuine weakening here; removing it needs a nonce
-           * threaded through the document, which Next's App Router does not
-           * make available to a static header.
+           * `script-src 'unsafe-inline'` — THE KNOWN WEAKNESS, stated plainly.
+           *
+           * Next's App Router streams RSC payloads through inline
+           * `<script>self.__next_f.push(...)</script>` tags. Without
+           * `'unsafe-inline'` they are blocked and the application does not
+           * hydrate at all — verified, not assumed: the full e2e suite fails
+           * 44 of 52 with the tightened policy.
+           *
+           * The correct fix is a per-request nonce, and it was attempted. It
+           * does not work here: Next stamps nonces only onto DYNAMICALLY
+           * rendered pages, and these routes are statically prerendered, so
+           * their HTML predates any nonce. Adopting it means forcing dynamic
+           * rendering app-wide — a real architecture and performance decision,
+           * not a config tweak, and one for a human to take deliberately.
+           *
+           * What limits the exposure meanwhile: this app contains no
+           * `dangerouslySetInnerHTML`, no `innerHTML` assignment, no `eval`
+           * and no `new Function` (asserted by the e2e suite). React escapes
+           * every interpolation, so there is no known path by which attacker
+           * markup reaches the document. `'unsafe-inline'` therefore removes a
+           * layer of defence rather than opening a hole — but it is a removed
+           * layer, and P14.3 stays PARTIAL because of it, alongside the
+           * unconfigured Cloudflare edge.
            */
           {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'wasm-unsafe-eval'",
+              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob:",
               "connect-src 'self'",

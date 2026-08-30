@@ -11,4 +11,5 @@
  */
 export { IdentityService } from './internal/identity.service';
 export type { CurrentUser } from './internal/identity.service';
+export { KeycloakAdminClient } from './internal/keycloak-admin.client';
 export { IdentityModule } from './identity.module';

@@ -157,10 +157,7 @@ const ar = {
   menuTitle: 'القائمة',
   menuOpen: 'فتح القائمة',
   menuClose: 'إغلاق القائمة',
-  roleLibyaDoctor: 'طبيب مُحيل (ليبيا)',
   rolePatient: 'مريض',
-  roleTunisiaDoctor: 'طبيب مستقبِل (تونس)',
-  roleAdmin: 'مشرف',
   footerDisclaimer: 'خدمة نقل وحجز — ليست أداة تشخيص.',
   breadcrumbLabel: 'مسار التنقل',
 
@@ -430,6 +427,28 @@ const ar = {
   sessionExtend: 'تمديد الجلسة',
   sessionRemaining: 'الوقت المتبقي',
   sessionExpired: 'انتهت الجلسة. سجّل الدخول من جديد.',
+
+  // roles and chrome (§4.3 — a role is named by the corridor side it plays)
+  roleApplicant: 'قيد التسجيل',
+  navProfile: 'الملف الشخصي',
+  navSettings: 'الإعدادات',
+  navPricing: 'الأسعار',
+  navVerification: 'حالة التحقق',
+  navMenuPrimary: 'التنقل الرئيسي',
+  navAccount: 'الحساب',
+  themeLabel: 'المظهر',
+  themeLight: 'فاتح',
+  themeDark: 'داكن',
+  themeSystem: 'حسب النظام',
+  themeDescription: 'يتبع خيار «حسب النظام» إعدادات جهازك.',
+
+  // sidebar sections
+  navSectionBilling: 'الفوترة',
+  navSectionAdmin: 'إدارة المنصّة',
+  notificationsDescription: 'تغيّرات الحالة والرسائل والملفات الجديدة.',
+
+  // public surface chrome
+  publicOpenApp: 'فتح التطبيق',
 } as const;
 
 export type Dictionary = { readonly [K in keyof typeof ar]: string };
@@ -569,10 +588,7 @@ const fr: Dictionary = {
   menuTitle: 'Menu',
   menuOpen: 'Ouvrir le menu',
   menuClose: 'Fermer le menu',
-  roleLibyaDoctor: 'Médecin référent (Libye)',
   rolePatient: 'Patient',
-  roleTunisiaDoctor: 'Médecin destinataire (Tunisie)',
-  roleAdmin: 'Administrateur',
   footerDisclaimer: 'Service de transfert et de réservation — pas un outil de diagnostic.',
   breadcrumbLabel: 'Fil d’Ariane',
 
@@ -836,6 +852,28 @@ const fr: Dictionary = {
   sessionExtend: 'Prolonger la session',
   sessionRemaining: 'Temps restant',
   sessionExpired: 'Session expirée. Veuillez vous reconnecter.',
+
+  // roles and chrome (§4.3 — a role is named by the corridor side it plays)
+  roleApplicant: "En cours d'inscription",
+  navProfile: 'Profil',
+  navSettings: 'Paramètres',
+  navPricing: 'Tarifs',
+  navVerification: 'Statut de vérification',
+  navMenuPrimary: 'Navigation principale',
+  navAccount: 'Compte',
+  themeLabel: 'Apparence',
+  themeLight: 'Clair',
+  themeDark: 'Sombre',
+  themeSystem: 'Système',
+  themeDescription: "L'option « Système » suit les réglages de votre appareil.",
+
+  // sidebar sections
+  navSectionBilling: 'Facturation',
+  navSectionAdmin: 'Administration',
+  notificationsDescription: 'Changements de statut, messages et nouveaux fichiers.',
+
+  // public surface chrome
+  publicOpenApp: "Ouvrir l'application",
 };
 
 /**
@@ -988,10 +1026,7 @@ const en: Dictionary = {
   menuTitle: 'Menu',
   menuOpen: 'Open menu',
   menuClose: 'Close menu',
-  roleLibyaDoctor: 'Referring doctor (Libya)',
   rolePatient: 'Patient',
-  roleTunisiaDoctor: 'Receiving doctor (Tunisia)',
-  roleAdmin: 'Administrator',
   footerDisclaimer: 'A transfer and scheduling service — not a diagnostic tool.',
   breadcrumbLabel: 'Breadcrumb',
 
@@ -1263,6 +1298,28 @@ const en: Dictionary = {
   sessionExtend: 'Extend session',
   sessionRemaining: 'Time remaining',
   sessionExpired: 'Session expired. Please sign in again.',
+
+  // roles and chrome (§4.3 — a role is named by the corridor side it plays)
+  roleApplicant: 'Applicant',
+  navProfile: 'Profile',
+  navSettings: 'Settings',
+  navPricing: 'Pricing',
+  navVerification: 'Verification status',
+  navMenuPrimary: 'Primary navigation',
+  navAccount: 'Account',
+  themeLabel: 'Theme',
+  themeLight: 'Light',
+  themeDark: 'Dark',
+  themeSystem: 'System',
+  themeDescription: 'The System option follows your device settings.',
+
+  // sidebar sections
+  navSectionBilling: 'Billing',
+  navSectionAdmin: 'Administration',
+  notificationsDescription: 'Status changes, messages, and new files.',
+
+  // public surface chrome
+  publicOpenApp: 'Open the app',
 };
 
 export const DICTIONARIES: Record<UiLocale, Dictionary> = { ar, fr, en };

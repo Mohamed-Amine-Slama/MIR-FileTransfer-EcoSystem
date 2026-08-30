@@ -30,10 +30,96 @@ locals {
 }
 
 ###############################################################################
+# 0. ACCESS LOGS — who touched which object, and when
+###############################################################################
+#
+# S3 server access logging is separate from the application audit log (P4.4).
+# The application log records what the APPLICATION did; this records what S3
+# saw, including access that never passed through the application at all.
+# During a breach investigation the difference between those two is the whole
+# question (docs/runbooks/incident-response.md).
+#
+# Deliberately NOT Object Lock: a log bucket that cannot expire grows without
+# bound, and this is corroborating evidence rather than the source of record —
+# the audit bucket below is the immutable one.
+
+resource "aws_s3_bucket" "access_logs" {
+  # checkov:skip=CKV2_AWS_62:Event notifications are not part of this design. Nothing consumes S3 events; ingestion is driven by the application (P7.4).
+  # checkov:skip=CKV_AWS_144:Access logs are corroborating evidence, not the source of record. The originals bucket replicates; losing a region's access logs does not lose a scan.
+  # checkov:skip=CKV_AWS_145:S3 log delivery cannot write to an SSE-KMS bucket. These logs carry request metadata only -- never object contents or patient data -- and are encrypted with SSE-S3 above.
+  bucket = "${local.originals_name}-access-logs"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = merge(var.tags, {
+    Name      = "${local.originals_name}-access-logs"
+    DataClass = "access-log"
+  })
+}
+
+resource "aws_s3_bucket_versioning" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+  versioning_configuration { status = "Enabled" }
+}
+
+resource "aws_s3_bucket_public_access_block" "access_logs" {
+  bucket                  = aws_s3_bucket.access_logs.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# SSE-S3 rather than SSE-KMS: S3 log delivery cannot write to a bucket
+# encrypted with a customer-managed key. The logs contain request metadata,
+# never object contents or patient data.
+resource "aws_s3_bucket_server_side_encryption_configuration" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+  rule {
+    id     = "expire-access-logs"
+    status = "Enabled"
+    filter {}
+    # Long enough to investigate an incident discovered late; short enough that
+    # the bucket does not grow forever. Revisit against L5 and L8 once answered.
+    expiration { days = 400 }
+    noncurrent_version_expiration { noncurrent_days = 30 }
+    # Failed multipart uploads are invisible in the console and still billed.
+    abort_incomplete_multipart_upload { days_after_initiation = 7 }
+  }
+}
+
+resource "aws_s3_bucket_acl" "access_logs" {
+  depends_on = [aws_s3_bucket_ownership_controls.access_logs]
+  bucket     = aws_s3_bucket.access_logs.id
+  acl        = "log-delivery-write"
+}
+
+resource "aws_s3_bucket_ownership_controls" "access_logs" {
+  # checkov:skip=CKV2_AWS_65:S3 server access log delivery requires the log-delivery-write ACL, so ACLs cannot be disabled on this bucket specifically. Every other bucket keeps them off.
+  bucket = aws_s3_bucket.access_logs.id
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+###############################################################################
 # 1. ORIGINALS — immutable source of record
 ###############################################################################
 
 resource "aws_s3_bucket" "originals" {
+  # checkov:skip=CKV2_AWS_61:Deliberate. This is the immutable source of record under Object Lock in COMPLIANCE mode; a lifecycle expiry on it would either be refused or destroy the only copy of a scan. Retention is set by L5, which is unanswered -- see docs/pre-launch-checklist.md.
+  # checkov:skip=CKV2_AWS_62:Event notifications are not part of this design; ingestion is driven by the application (P7.4).
   bucket = local.originals_name
 
   # Object Lock CANNOT be enabled on an existing bucket. It must be set at
@@ -214,6 +300,8 @@ data "aws_iam_policy_document" "originals" {
 ###############################################################################
 
 resource "aws_s3_bucket" "derived" {
+  # checkov:skip=CKV2_AWS_62:No consumer for S3 events on this bucket.
+  # checkov:skip=CKV_AWS_144:Deliberate. Everything here is DERIVED -- thumbnails and previews regenerated from the originals, which do replicate (ADR-4). Paying to replicate regenerable data buys nothing.
   bucket = local.derived_name
   tags = merge(var.tags, {
     Name      = local.derived_name
@@ -267,6 +355,9 @@ resource "aws_s3_bucket_lifecycle_configuration" "derived" {
 ###############################################################################
 
 resource "aws_s3_bucket" "audit" {
+  # checkov:skip=CKV2_AWS_61:Object Lock compliance mode. Audit history must outlive any expiry policy; retention follows L5/L8, both unanswered.
+  # checkov:skip=CKV2_AWS_62:No consumer for S3 events on this bucket.
+  # checkov:skip=CKV_AWS_144:Not required by the BUILD_SPEC P2.4 bucket table. Worth revisiting: a breach investigation that outlives a region loss would want this, and it is cheap. Tracked, not dismissed.
   bucket              = local.audit_name
   object_lock_enabled = true
 
@@ -316,4 +407,22 @@ resource "aws_s3_bucket_public_access_block" "audit" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_logging" "originals" {
+  bucket        = aws_s3_bucket.originals.id
+  target_bucket = aws_s3_bucket.access_logs.id
+  target_prefix = "originals/"
+}
+
+resource "aws_s3_bucket_logging" "derived" {
+  bucket        = aws_s3_bucket.derived.id
+  target_bucket = aws_s3_bucket.access_logs.id
+  target_prefix = "derived/"
+}
+
+resource "aws_s3_bucket_logging" "audit" {
+  bucket        = aws_s3_bucket.audit.id
+  target_bucket = aws_s3_bucket.access_logs.id
+  target_prefix = "audit/"
 }

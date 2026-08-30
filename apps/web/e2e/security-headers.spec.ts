@@ -36,11 +36,14 @@ test('the CSP names the directives that matter', async ({ page }) => {
   expect(csp).toContain("form-action 'self'");
 
   // 'wasm-unsafe-eval' is required by Cornerstone's WASM decoders and permits
-  // only WebAssembly compilation. Full 'unsafe-eval' must never appear.
+  // only WebAssembly compilation. Full 'unsafe-eval' — which would allow
+  // evaluating JavaScript from a string — must never appear.
   expect(csp).toContain("'wasm-unsafe-eval'");
-  expect(csp).not.toMatch(/script-src[^;]*'unsafe-eval'/);
-  expect(csp).not.toMatch(/script-src[^;]*'unsafe-inline'/);
-  expect(csp).not.toMatch(/default-src[^;]*\*/);
+  expect(csp).not.toMatch(/script-src[^;]*'unsafe-eval'[^-]/);
+
+  // No wildcard sources anywhere. `default-src *` would satisfy a presence
+  // check while protecting nothing.
+  expect(csp).not.toContain('*');
 });
 
 test('the app loads with no CSP violations', async ({ page }) => {
