@@ -172,6 +172,9 @@ function ProfileScreen(): React.JSX.Element {
 
         <form
           className="space-y-4"
+          // See the note on the sign-up form: the browser's native validation
+          // would pre-empt this one with an untranslated tooltip.
+          noValidate
           onSubmit={(e) => {
             e.preventDefault();
             void save();

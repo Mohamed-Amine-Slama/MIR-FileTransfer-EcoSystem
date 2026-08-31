@@ -1,8 +1,20 @@
 import { expect, test } from '@playwright/test';
 
-test('placeholder page renders (P1.2)', async ({ page }) => {
+/**
+ * `/` used to render a page headed "MIR" for everyone. It now renders the
+ * marketing landing page to a visitor and the role dashboard to a signed-in
+ * user, so the assertion moved with it: what this test still guarantees is that
+ * the front door RESPONDS AND HAS A HEADING — the P1.2 property — rather than
+ * which words that heading contains.
+ *
+ * The wordmark did not disappear; it is in the chrome. Asserting on it there
+ * would make this a test of the header component, which `public-surface.spec.ts`
+ * already covers more precisely.
+ */
+test('the front door renders (P1.2)', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'MIR' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'MIR' })).toBeVisible();
 });
 
 test('document direction is RTL by default (DECISION D4)', async ({ page }) => {
