@@ -99,6 +99,22 @@ export default function SignUpPage(): React.JSX.Element {
       <Card>
         <form
           className="space-y-4"
+          /*
+           * `noValidate` turns OFF the browser's own constraint checking, and
+           * that is a deliberate accessibility and i18n decision rather than a
+           * shortcut.
+           *
+           * With it on, an invalid `type="email"` value makes the browser block
+           * submission and show a native tooltip — in the BROWSER's language,
+           * not the interface's, attached to no element the page controls, and
+           * gone the moment focus moves. An Arabic-speaking clinician on an
+           * English-locale machine gets an English balloon and no error text on
+           * the field at all.
+           *
+           * The validation below produces a translated message, rendered next
+           * to its field with role="alert", for every problem at once.
+           */
+          noValidate
           onSubmit={(e) => {
             e.preventDefault();
             void submit();
