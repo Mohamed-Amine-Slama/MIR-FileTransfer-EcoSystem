@@ -37,6 +37,22 @@ const nextConfig = {
    * fix. The server bundle keeps the real modules, so nothing server-side
    * loses filesystem access.
    */
+  /*
+   * THIS BLOCK IS WHY apps/web IS PINNED TO NEXT 15.
+   *
+   * Next 16 enables Turbopack by default, and Turbopack refuses to start when a
+   * `webpack` config is present with no `turbopack` config — the build fails
+   * outright ("This build is using Turbopack, with a `webpack` config"). Worse
+   * than the failure would be silencing it: passing `turbopack: {}` makes the
+   * build pass while IGNORING the fallbacks below, so `@cornerstonejs/dicom-image-loader`
+   * pulls `fs` into the browser bundle and the DICOM viewer breaks — the one
+   * screen with a hard 5-second performance gate (P9.1).
+   *
+   * Moving to Next 16 therefore means porting these fallbacks to Turbopack's
+   * `resolveAlias` and re-running the viewer e2e suite, not merging a version
+   * bump. `.github/dependabot.yml` already excludes `next` majors for this
+   * reason; the 15 -> 16 bump predates that rule.
+   */
   webpack(config, { isServer }) {
     if (!isServer) {
       config.resolve.fallback = {
