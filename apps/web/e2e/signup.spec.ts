@@ -18,9 +18,13 @@ test.describe('sign-up (§5.1)', () => {
     await page.getByTestId('signup-phone').fill('0911234567');
     await page.getByTestId('signup-submit').click();
 
-    // Three separate complaints, not one generic failure: the person has to
-    // know which field to fix.
-    await expect(page.getByRole('alert')).toHaveCount(4);
+    // Scoped to the form. Next injects its own `role="alert"` route announcer
+    // into every page, so an unscoped count measures the framework as well as
+    // the form and lands one too high.
+    //
+    // One complaint per bad field, not a single generic failure: the person has
+    // to know WHICH field to fix.
+    await expect(page.locator('form').getByRole('alert')).toHaveCount(4);
   });
 
   test('states the password rule up front rather than after a rejection', async ({ page }) => {

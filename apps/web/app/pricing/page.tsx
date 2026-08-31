@@ -183,9 +183,19 @@ function PlanCard({
 function ComparisonTable({ plans }: { plans: PlanTier[] }): React.JSX.Element {
   const t = useT();
 
+  /*
+   * `w-full` and `min-w-[36rem]` together were a contradiction — "fill the
+   * container" and "be at least 576px wide" — and Chromium resolved it by
+   * letting the table push the DOCUMENT wider on a narrow screen instead of
+   * scrolling inside its box. On a phone that turns one wide table into a
+   * horizontally scrolling page, which §4.5 forbids.
+   *
+   * `w-max min-w-full` states the intent without the conflict: as wide as the
+   * content needs, and never narrower than the container.
+   */
   return (
-    <div className="overflow-x-auto rounded-lg border" data-testid="pricing-comparison">
-      <table className="w-full min-w-[36rem] border-collapse text-sm">
+    <div className="w-full overflow-x-auto rounded-lg border" data-testid="pricing-comparison">
+      <table className="w-max min-w-full border-collapse text-sm">
         <caption className="sr-only">{t.pricingTitle}</caption>
         <thead>
           <tr className="border-b bg-muted/50">
