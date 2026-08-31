@@ -15,7 +15,25 @@
 # ---------------------------------------------------------------------------
 # base — toolchain shared by every stage
 # ---------------------------------------------------------------------------
-FROM node:26-alpine AS base
+# PINNED TO NODE 22, AND NOT BUMPABLE BY A ROBOT.
+#
+# Two independent reasons, either of which is sufficient:
+#
+#   1. COREPACK IS GONE FROM NODE 25 AND LATER. It was unbundled from the
+#      Node.js distribution, so `corepack enable` below exits 127 — command not
+#      found — and the build dies at the first RUN. That is exactly what
+#      `bump node from 22-alpine to 26-alpine` produced.
+#
+#   2. The root package.json declares `engines: { node: ">=20.0.0 <25" }`. Node
+#      26 is outside the range this project says it supports, so the image was
+#      building the application on a runtime the repository does not claim to
+#      work on.
+#
+# Node 22 is Active LTS and ships corepack 0.34.x. Moving off it means deciding
+# how pnpm gets installed without corepack (a `npm i -g pnpm@9.15.4` layer, or
+# a base image that bundles it) AND widening `engines` deliberately — not
+# merging a one-line version bump.
+FROM node:22-alpine AS base
 
 # `sharp` is a production dependency, and its musl build links against libvips
 # through the glibc compatibility shim. Installed in the base stage so the

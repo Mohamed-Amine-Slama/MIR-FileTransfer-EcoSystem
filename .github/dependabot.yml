@@ -100,6 +100,23 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+    ignore:
+      # Majeures de Node exclues, pour la même raison que le bloc npm ci-dessus :
+      # l'image de base porte une garantie du système.
+      #
+      # Le 2026-08-31, « bump node from 22-alpine to 26-alpine » a cassé la
+      # construction des deux images. Corepack a été retiré de la distribution
+      # Node à partir de la 25, donc `corepack enable` sort en 127 (commande
+      # introuvable) dès le premier RUN. Le bloc npm protège zod, Cornerstone,
+      # vitest, next, NestJS et pg ; ce bloc-ci ne protégeait rien, et Node 26
+      # est de surcroît hors de la plage `engines` (">=20.0.0 <25") que le dépôt
+      # déclare supporter.
+      #
+      # Une montée de Node majeure implique de décider comment pnpm s'installe
+      # sans corepack ET d'élargir `engines` délibérément. Les mineures et les
+      # correctifs de sécurité continuent d'arriver normalement.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
 
   # --- Terraform --------------------------------------------------------------
   - package-ecosystem: "terraform"
