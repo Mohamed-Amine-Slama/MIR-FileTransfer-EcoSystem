@@ -102,12 +102,36 @@ test.describe('pricing (§5.7)', () => {
 
   test('scrolls the comparison table inside its own container (§4.5)', async ({ page }) => {
     await page.goto('/pricing');
-    // The page body must never scroll horizontally — a wide table that does
-    // that makes every screen on a phone worse, not just this one.
-    const overflow = await page.evaluate(() => {
-      const el = document.querySelector('table')?.parentElement;
-      return el === null || el === undefined ? null : getComputedStyle(el).overflowX;
+    await expect(page.getByTestId('pricing-comparison')).toBeVisible();
+
+    // The property that matters: a table wider than a phone must scroll
+    // ITSELF, not drag the page with it.
+    //
+    // Measured by ATTEMPTING THE SCROLL rather than by comparing scrollWidth.
+    // Under RTL, Chromium's scrollLeft runs from -(scrollWidth - clientWidth)
+    // to 0 and scrollWidth picks up sub-pixel and clipped-overflow artefacts,
+    // so the arithmetic comparison reports a page as scrollable that a finger
+    // cannot actually move. Trying it is the question a user would ask.
+    const pageMoved = await page.evaluate(() => {
+      const doc = document.documentElement;
+      const before = doc.scrollLeft;
+      doc.scrollLeft = before - 200;
+      const moved = Math.abs(doc.scrollLeft - before) > 2;
+      doc.scrollLeft = before;
+      return moved;
     });
-    expect(overflow).toBe('auto');
+    expect(pageMoved, 'the page itself scrolled horizontally').toBe(false);
+
+    // And the container is the thing set up to absorb it.
+    //
+    // Deliberately NOT asserting that it is scrolled right now: whether the
+    // table exceeds its box depends on the viewport, and at desktop width it
+    // correctly does not. What must hold at every width is that the overflow
+    // has somewhere to go that is not the page.
+    const overflowX = await page.evaluate(() => {
+      const el = document.querySelector('[data-testid="pricing-comparison"]');
+      return el === null ? null : getComputedStyle(el).overflowX;
+    });
+    expect(['auto', 'scroll']).toContain(overflowX);
   });
 });
