@@ -114,7 +114,8 @@ const ar = {
   statusAuthorised: 'تم حجز المبلغ',
   statusConfirmed: 'مؤكد',
   statusCancelled: 'ملغى',
-  statusExpired: 'منتهي',
+  statusCompleted: 'مكتمل',
+  statusNoShow: 'لم يحضر',
 
   // availability
   availabilityTitle: 'أوقات التوفر',
@@ -693,7 +694,8 @@ const fr: Dictionary = {
   statusAuthorised: 'Montant préautorisé',
   statusConfirmed: 'Confirmé',
   statusCancelled: 'Annulé',
-  statusExpired: 'Expiré',
+  statusCompleted: 'Terminé',
+  statusNoShow: 'Absent',
 
   availabilityTitle: 'Disponibilités',
   availabilityDescription: 'Définissez les périodes réservables par les patients.',
@@ -1269,7 +1271,8 @@ const en: Dictionary = {
   statusAuthorised: 'Payment held',
   statusConfirmed: 'Confirmed',
   statusCancelled: 'Cancelled',
-  statusExpired: 'Expired',
+  statusCompleted: 'Completed',
+  statusNoShow: 'No-show',
 
   // availability
   availabilityTitle: 'Availability',

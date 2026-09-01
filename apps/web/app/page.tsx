@@ -24,6 +24,7 @@ import { useSession } from '../lib/session/session';
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge';
 import { Landing } from '../components/marketing/Landing';
 import {
+import { isLiveAppointment } from '../lib/scheduling/status';
   Card,
   EmptyState,
   PageHeader,
@@ -228,9 +229,7 @@ function PatientDashboard(): React.JSX.Element {
       : (appointments
           .filter(
             (a) =>
-              new Date(a.startsAt).getTime() > Date.now() &&
-              a.status !== 'cancelled' &&
-              a.status !== 'expired',
+              new Date(a.startsAt).getTime() > Date.now() && isLiveAppointment(a.status),
           )
           .sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0] ?? null);
 

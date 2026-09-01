@@ -61,7 +61,7 @@ export class BillingService {
     });
 
     if (appointment === undefined) throw new NotFoundException('Appointment not found');
-    if (appointment.status === 'cancelled' || appointment.status === 'expired') {
+    if (appointment.status === 'cancelled') {
       throw new NotFoundException('Appointment is no longer open for payment');
     }
 

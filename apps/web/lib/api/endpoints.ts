@@ -105,7 +105,7 @@ export interface Appointment {
   doctorName?: string;
   startsAt: string;
   endsAt: string;
-  status: 'pending_payment' | 'authorised' | 'confirmed' | 'cancelled' | 'expired';
+  status: 'pending_payment' | 'authorised' | 'confirmed' | 'cancelled' | 'completed' | 'no_show';
   studyIds: string[];
 }
 
