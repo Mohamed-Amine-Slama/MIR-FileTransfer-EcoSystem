@@ -14,7 +14,21 @@ import { IdentityService, type CurrentUser } from './identity.service';
 export class IdentityController {
   constructor(private readonly identity: IdentityService) {}
 
-  @RequiresRole('patient', 'libya_doctor', 'tunisia_doctor', 'admin')
+  /*
+   * `applicant` BELONGS ON THIS LIST, and leaving it off was a real defect.
+   *
+   * This is the endpoint the web client calls on every load to decide whether
+   * anyone is signed in. An applicant that cannot reach it is rendered as
+   * anonymous — so the account can authenticate, hold a valid token, and still
+   * be unable to see /verification, which is the single screen the role exists
+   * to reach (§5.1 P0: know where your application stands without contacting
+   * the platform team).
+   *
+   * Listing a role here grants REACHABILITY only. The response is built from
+   * the caller's own row, which row-level security already restricts to
+   * themselves, so an applicant learns nothing here they should not.
+   */
+  @RequiresRole('patient', 'libya_doctor', 'tunisia_doctor', 'admin', 'applicant')
   @Get('me')
   async me(): Promise<CurrentUser> {
     return this.identity.currentUser();

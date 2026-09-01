@@ -153,9 +153,20 @@ services:
     # DATABASE_MIGRATOR_URL, not DATABASE_URL. The migrator must connect as a
     # role that OWNS the tables; mir_app deliberately cannot run DDL, so that an
     # injection bug cannot drop an RLS policy (ADR-6, migrate-cli.ts).
+    #
+    # Taken from .env rather than written inline: a connection string in a
+    # committed compose file is a committed secret (§6). `:?` fails the run
+    # loudly instead of silently falling back to a local database that has no
+    # migrations on it.
     environment:
-      DATABASE_MIGRATOR_URL: postgresql://postgres:postgres@postgres:5432/mir
+      DATABASE_MIGRATOR_URL: ${DATABASE_MIGRATOR_URL:?set DATABASE_MIGRATOR_URL in .env}
     command: ['node', 'dist/shared/db/migrate-cli.js', 'up']
+    # migrate-cli makes ONE connection attempt and exits 1 on failure, so the
+    # waiting has to happen out here. Without this, compose starts the migrator
+    # alongside postgres and the connect is refused seconds before postgres has
+    # even opened its socket. `service_started` would not be enough either: a
+    # restarted server replays WAL for several seconds before it accepts
+    # connections, which is what the healthcheck below actually waits for.
     depends_on:
       postgres:
         condition: service_healthy
@@ -176,13 +187,16 @@ services:
     # app appeared to work. This mirrors what the RLS test harness already does
     # (apps/api/src/shared/db/testing/rls-harness.ts).
     environment:
-      PGPASSWORD: postgres
+      # The migrator URL owns the tables, so it is also the only thing here
+      # permitted to ALTER a role. Session mode (5432) — see .env.
+      MIGRATOR_URL: ${DATABASE_MIGRATOR_URL:?set DATABASE_MIGRATOR_URL in .env}
+      APP_PASSWORD: ${MIR_APP_DEV_PASSWORD:?set MIR_APP_DEV_PASSWORD in .env}
     entrypoint:
       - sh
       - -c
       - |
-        psql -v ON_ERROR_STOP=1 -h postgres -U postgres -d mir \
-          -c "ALTER ROLE mir_app LOGIN PASSWORD '${MIR_APP_DEV_PASSWORD:-mir_app_dev_pw}'"
+        psql -v ON_ERROR_STOP=1 "$$MIGRATOR_URL" \
+          -c "ALTER ROLE mir_app LOGIN PASSWORD '$$APP_PASSWORD'"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -206,7 +220,16 @@ services:
       # The non-superuser application role, so RLS is genuinely enforced here
       # rather than silently bypassed (ADR-6, P3.2). Password attached by
       # db-grant above.
-      DATABASE_URL: postgresql://mir_app:${MIR_APP_DEV_PASSWORD:-mir_app_dev_pw}@postgres:5432/mir
+      #
+      # COMPOSED HERE, from the same variable db-grant uses, rather than taken
+      # whole from .env. Nothing secret is added by doing so — the only secret
+      # is the password, and that is still a reference — but it removes the one
+      # thing a whole connection string in .env cannot prevent: db-grant
+      # attaching one password to mir_app while this hands the API a different
+      # one. That drift is not hypothetical, it is what made every request fail
+      # with "password authentication failed for user mir_app" on 2026-09-01,
+      # and nothing in the error points at two variables disagreeing.
+      DATABASE_URL: postgresql://mir_app:${MIR_APP_DEV_PASSWORD:?set MIR_APP_DEV_PASSWORD in .env}@postgres:5432/mir
       DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
 
       REDIS_URL: redis://redis:6379
@@ -225,6 +248,23 @@ services:
       KEYCLOAK_ISSUER_URL: http://localhost:${KEYCLOAK_HOST_PORT:-8080}/realms/mir
       KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/mir/protocol/openid-connect/certs
       KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-mir-api}
+
+      # Self-service sign-up (§5.1). Optional on purpose: with no admin
+      # credential /auth/register answers 501 instead of inventing a local
+      # account, so a deployment that provisions users out of band simply
+      # leaves these unset.
+      #
+      # Declared with NO VALUE, which passes the variable through only when it
+      # is defined. `${VAR:-}` would set it to the empty string, and the config
+      # schema's `.min(1)` rejects that — the API would refuse to boot with a
+      # complaint about a variable nobody set.
+      KEYCLOAK_ADMIN_CLIENT_ID:
+      KEYCLOAK_ADMIN_CLIENT_SECRET:
+      # Where to REACH the admin API, which is not where the issuer says
+      # tokens come from: KEYCLOAK_ISSUER_URL must stay `localhost` so it
+      # matches the `iss` a browser-obtained token carries, and `localhost`
+      # in here is this container. Same split as KEYCLOAK_JWKS_URL above.
+      KEYCLOAK_ADMIN_URL: http://keycloak:8080
 
       # Matches ORTHANC__REGISTERED_USERS on the orthanc service above. The
       # browser never talks to Orthanc directly (P8.2) — only the API does.
@@ -249,8 +289,6 @@ services:
     ports:
       - '${API_HOST_PORT:-3000}:3000'
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       orthanc:

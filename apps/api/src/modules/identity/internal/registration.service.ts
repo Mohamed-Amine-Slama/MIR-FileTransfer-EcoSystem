@@ -98,6 +98,30 @@ export class RegistrationService {
     // Address already taken upstream. Silence is the answer; see the note above.
     if (sub === null) return;
 
+    /*
+     * THE ROLE IS PART OF CREATING THE ACCOUNT, NOT OF APPROVING IT.
+     *
+     * The auth guard reads the role from the TOKEN, and Keycloak only puts one
+     * there if the user holds it as a realm role. Without this the account
+     * authenticates successfully and resolves to no role at all — every request
+     * 401s, /verification included, which is the one screen an applicant is
+     * supposed to be able to reach. The 'applicant' in the database row is a
+     * different fact and does not reach the token.
+     *
+     * `applicant` is not a grant of anything: no RLS policy in this schema
+     * names it. The clinical role still arrives only from the verification
+     * decision, which is the other caller of assignRealmRole.
+     *
+     * Before the row is written, so the existing rollback covers a failure
+     * here. Left alone, it would leave an account that can never sign in.
+     */
+    try {
+      await this.keycloak.assignRealmRole(sub, 'applicant');
+    } catch (err) {
+      await this.keycloak.deleteUserQuietly(sub);
+      throw err;
+    }
+
     let userId: string | null;
     try {
       userId = await this.db.txAs(anonymousContext(), async (tx) => {
