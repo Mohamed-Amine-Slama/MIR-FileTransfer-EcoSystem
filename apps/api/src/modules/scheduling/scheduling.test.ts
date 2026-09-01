@@ -543,3 +543,148 @@ describe('P10.3 study linkage', () => {
     expect(appts.rowCount).toBe(0);
   });
 });
+
+/**
+ * The practice-side calendar — the doctor's own diary, as opposed to the
+ * patient-initiated referral flow everything above exercises.
+ *
+ * These cover the gap between what the HTTP layer's `@RequiresRole` decorators
+ * ADVERTISE and what row-level security actually permits. `POST /appointments`
+ * and `DELETE /appointments/:id` have listed the referring side since P10 was
+ * written, but `scheduling_appointments` carried no INSERT or UPDATE policy for
+ * it — only `appointments_referring_doctor`, which is `FOR SELECT`. The insert
+ * therefore failed with 42501, which `attemptBooking` maps to "Patient not
+ * found": a message that sends you looking at the patient record, and the
+ * patient record is fine.
+ *
+ * A route whose decorator and whose policy disagree is worse than one that is
+ * simply closed, because it reads as supported.
+ */
+describe('the practice calendar', () => {
+  it('lets a referring doctor book for a patient they created', async () => {
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const patient = await createPatient(h.owner, libyaDoctor);
+
+    const appointment = await runWithContext(ctx(libyaDoctor, 'libya_doctor'), () =>
+      scheduling.book({
+        patientId: patient,
+        doctorId: tunisDoctor,
+        startsAt: SLOT_START,
+        endsAt: SLOT_END,
+      }),
+    );
+
+    expect(appointment.id).toBeTruthy();
+    expect(appointment.patientId).toBe(patient);
+  });
+
+  it('still refuses a referring doctor a patient they did not create', async () => {
+    const mine = await createUser(h.owner, 'libya_doctor');
+    const theirs = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const stranger = await createPatient(h.owner, theirs);
+
+    await expect(
+      runWithContext(ctx(mine, 'libya_doctor'), () =>
+        scheduling.book({
+          patientId: stranger,
+          doctorId: tunisDoctor,
+          startsAt: SLOT_START,
+          endsAt: SLOT_END,
+        }),
+      ),
+    ).rejects.toThrow(/not found/i);
+  });
+
+  it('lets a referring doctor cancel a booking they made, freeing the slot', async () => {
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+    const patient = await createPatient(h.owner, libyaDoctor);
+
+    const appointment = await runWithContext(ctx(libyaDoctor, 'libya_doctor'), () =>
+      scheduling.book({
+        patientId: patient,
+        doctorId: tunisDoctor,
+        startsAt: SLOT_START,
+        endsAt: SLOT_END,
+      }),
+    );
+
+    await runWithContext(ctx(libyaDoctor, 'libya_doctor'), () =>
+      scheduling.cancel(appointment.id),
+    );
+
+    const after = await h.owner.query<{ status: string }>(
+      'SELECT status FROM scheduling_appointments WHERE id = $1',
+      [appointment.id],
+    );
+    expect(after.rows[0]?.status).toBe('cancelled');
+  });
+
+  it('shows the referring side a receiving doctor open slots', async () => {
+    // The slot picker on the booking screen reads this. With availability
+    // visible only to `patient`, it came back empty and the referring doctor
+    // saw "no availability" for a doctor who had published plenty.
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+
+    await runWithContext(ctx(tunisDoctor, 'tunisia_doctor'), () =>
+      scheduling.addAvailability({ startsAt: SLOT_START, endsAt: SLOT_END, slotMinutes: 30 }),
+    );
+
+    const slots = await runWithContext(ctx(libyaDoctor, 'libya_doctor'), () =>
+      scheduling.listOpenSlots(
+        tunisDoctor,
+        new Date(SLOT_START.getTime() - 3_600_000),
+        new Date(SLOT_END.getTime() + 3_600_000),
+      ),
+    );
+
+    expect(slots).toHaveLength(1);
+    expect(slots[0]?.startsAt.toISOString()).toBe(SLOT_START.toISOString());
+  });
+
+  it('lets a receiving doctor publish and read back their own availability', async () => {
+    const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
+
+    await runWithContext(ctx(tunisDoctor, 'tunisia_doctor'), () =>
+      scheduling.addAvailability({ startsAt: SLOT_START, endsAt: SLOT_END, slotMinutes: 30 }),
+    );
+
+    const windows = await runWithContext(ctx(tunisDoctor, 'tunisia_doctor'), () =>
+      scheduling.listAvailability(),
+    );
+    expect(windows).toHaveLength(1);
+  });
+
+  it('lets a referring doctor keep a diary of their own', async () => {
+    // The referring side runs a clinic too. `availability_owner` named the
+    // receiving role only, so their own windows vanished on write-then-read.
+    const libyaDoctor = await createUser(h.owner, 'libya_doctor');
+
+    await runWithContext(ctx(libyaDoctor, 'libya_doctor'), () =>
+      scheduling.addAvailability({ startsAt: SLOT_START, endsAt: SLOT_END, slotMinutes: 20 }),
+    );
+
+    const windows = await runWithContext(ctx(libyaDoctor, 'libya_doctor'), () =>
+      scheduling.listAvailability(),
+    );
+    expect(windows).toHaveLength(1);
+    expect(windows[0]?.slotMinutes).toBe(20);
+  });
+
+  it("keeps one doctor's diary out of another's", async () => {
+    const a = await createUser(h.owner, 'tunisia_doctor');
+    const b = await createUser(h.owner, 'tunisia_doctor');
+
+    await runWithContext(ctx(a, 'tunisia_doctor'), () =>
+      scheduling.addAvailability({ startsAt: SLOT_START, endsAt: SLOT_END }),
+    );
+
+    const seenByB = await runWithContext(ctx(b, 'tunisia_doctor'), () =>
+      scheduling.listAvailability(),
+    );
+    expect(seenByB).toHaveLength(0);
+  });
+});

@@ -530,13 +530,20 @@ export class SchedulingService {
    *
    * An authorisation that is never captured must not hold a slot forever —
    * that is a slot no other patient can book while no money will ever move.
+   *
+   * The status is `cancelled`, and `cancel_reason` is what distinguishes this
+   * from a patient changing their mind. The web client used to carry an
+   * `expired` status for the difference, which no query could ever return
+   * because nothing writes it — so the branch reading it was dead, and a
+   * patient whose payment window lapsed was told, indistinguishably, that
+   * their appointment had been cancelled.
    */
   async releaseExpiredAuthorisations(): Promise<number> {
     const windowHours = this.config.PAYMENT_AUTHORIZATION_WINDOW_HOURS;
     return this.db.tx(async (tx) => {
       const res = await tx.query(
         `UPDATE scheduling_appointments
-         SET status = 'cancelled'
+         SET status = 'cancelled', cancel_reason = 'authorisation_expired'
          WHERE status IN ('pending_payment', 'authorised')
            AND created_at < now() - ($1 || ' hours')::interval`,
         [String(windowHours)],

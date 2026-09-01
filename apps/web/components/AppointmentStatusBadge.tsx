@@ -12,6 +12,10 @@ import { Badge } from './ui';
  * taken, until the receiving doctor accepts. Rendering both as a generic
  * "pending" would hide the one fact they most need — that they have not been
  * charged yet.
+ *
+ * `no_show` is red and `completed` is green because they are not two shades of
+ * "done": one of them is the visit that happened and the other is the slot the
+ * practice lost.
  */
 export function AppointmentStatusBadge({
   status,
@@ -25,7 +29,8 @@ export function AppointmentStatusBadge({
     authorised: { tone: 'info', label: t.statusAuthorised },
     confirmed: { tone: 'success', label: t.statusConfirmed },
     cancelled: { tone: 'danger', label: t.statusCancelled },
-    expired: { tone: 'danger', label: t.statusExpired },
+    completed: { tone: 'success', label: t.statusCompleted },
+    no_show: { tone: 'danger', label: t.statusNoShow },
   };
 
   const { tone, label } = map[status];

@@ -8,6 +8,7 @@ import { useDateFormat, useT } from '../../../lib/i18n/provider';
 import { RoleGate } from '../../../components/RoleGate';
 import { AppointmentStatusBadge } from '../../../components/AppointmentStatusBadge';
 import {
+import { isLiveAppointment } from '../../lib/scheduling/status';
   Alert,
   Breadcrumbs,
   Button,
@@ -129,7 +130,7 @@ function AppointmentDetail({ appointmentId }: { appointmentId: string }): React.
   }
 
   const awaitingPayment = appointment.status === 'pending_payment';
-  const imagingLocked = appointment.status === 'pending_payment' || appointment.status === 'expired';
+  const imagingLocked = appointment.status === 'pending_payment';
 
   return (
     <Main data-testid="appointment-detail" data-status={appointment.status}>
@@ -203,7 +204,7 @@ function AppointmentDetail({ appointmentId }: { appointmentId: string }): React.
         )}
       </Card>
 
-      {appointment.status !== 'cancelled' && appointment.status !== 'expired' && (
+      {isLiveAppointment(appointment.status) && (
         <div>
           <Button
             variant="danger"
