@@ -55,7 +55,17 @@ export class KeycloakAdminClient {
     return match?.[1] ?? 'mir';
   }
 
+  /**
+   * The host to send admin requests to.
+   *
+   * KEYCLOAK_ADMIN_URL when set, because the issuer is a value to COMPARE `iss`
+   * against and not necessarily a route to Keycloak — under compose it names
+   * `localhost`, which from in here is this process. Falls back to the issuer's
+   * host, which is correct wherever the two names are the same.
+   */
   private baseUrl(): string {
+    const explicit = this.config.KEYCLOAK_ADMIN_URL;
+    if (explicit !== undefined) return explicit.replace(/\/+$/, '');
     return this.config.KEYCLOAK_ISSUER_URL.replace(/\/realms\/[^/]+\/?$/, '');
   }
 
@@ -165,10 +175,12 @@ export class KeycloakAdminClient {
   /**
    * Grant a realm role.
    *
-   * Called only from the verification decision. The role a token carries is
-   * what the auth guard and every RLS policy key on, so this is the moment an
-   * applicant becomes a clinician in the eyes of the whole system — the
-   * database side of that same transition is `identity_decide_verification`.
+   * Two callers, and they grant very different things. Registration attaches
+   * `applicant`, which no RLS policy names and which exists so a new account
+   * authenticates as SOMETHING rather than as nothing. The verification
+   * decision attaches the clinical role, and that is the moment an applicant
+   * becomes a clinician in the eyes of the whole system — the database side of
+   * that same transition is `identity_decide_verification`.
    */
   async assignRealmRole(sub: string, role: string): Promise<void> {
     const lookup = await this.admin(`/roles/${encodeURIComponent(role)}`, { method: 'GET' });

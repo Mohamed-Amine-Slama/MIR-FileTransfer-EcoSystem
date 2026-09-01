@@ -85,6 +85,22 @@ export const configSchema = z.object({
    */
   KEYCLOAK_ADMIN_CLIENT_ID: z.string().min(1).optional(),
   KEYCLOAK_ADMIN_CLIENT_SECRET: z.string().min(1).optional(),
+  /**
+   * Where to REACH Keycloak's admin API, when that is not where the issuer
+   * says tokens come from.
+   *
+   * `KEYCLOAK_ISSUER_URL` is not an address. It is the exact string a token's
+   * `iss` must equal, so it has to name the host the BROWSER used — under
+   * compose that is `localhost:8081`, which inside this container resolves to
+   * this container. Deriving the admin host from it makes every registration
+   * fail on a connection error that says nothing about why.
+   *
+   * `KEYCLOAK_JWKS_URL` already exists for exactly this split. This is the
+   * same idea for the admin API, and like that one it is only needed where the
+   * internal and external names differ.
+   */
+  KEYCLOAK_ADMIN_URL: z.string().url('KEYCLOAK_ADMIN_URL must be a URL').optional(),
+
   /** Realm to administer. Derived from the issuer when unset. */
   KEYCLOAK_REALM: z.string().min(1).optional(),
 
