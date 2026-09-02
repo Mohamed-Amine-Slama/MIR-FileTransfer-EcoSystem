@@ -354,9 +354,9 @@ describe('P10.1 availability and timezones', () => {
     // process runs in — display conversion is the client's job (§6).
     const tunisDoctor = await createUser(h.owner, 'tunisia_doctor');
 
-    const original = process.env.TZ;
+    const original = process.env['TZ'];
     try {
-      process.env.TZ = 'Africa/Tripoli'; // UTC+2
+      process.env['TZ'] = 'Africa/Tripoli'; // UTC+2
       const created = await runWithContext(ctx(tunisDoctor, 'tunisia_doctor'), () =>
         scheduling.addAvailability({ startsAt: SLOT_START, endsAt: SLOT_END }),
       );
@@ -364,8 +364,8 @@ describe('P10.1 availability and timezones', () => {
       expect(created.startsAt.toISOString()).toBe('2026-06-15T09:00:00.000Z');
       expect(created.endsAt.toISOString()).toBe('2026-06-15T09:30:00.000Z');
     } finally {
-      if (original === undefined) delete process.env.TZ;
-      else process.env.TZ = original;
+      if (original === undefined) delete process.env['TZ'];
+      else process.env['TZ'] = original;
     }
   });
 

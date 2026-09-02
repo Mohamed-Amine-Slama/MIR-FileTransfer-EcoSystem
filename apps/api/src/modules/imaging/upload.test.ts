@@ -23,6 +23,7 @@ import { ChecksumMismatchError, UploadService } from './internal/upload.service'
 import { IngestionService } from './internal/ingestion.service';
 import { InMemoryOrthancClient } from './internal/orthanc.client';
 import { ThumbnailService } from './internal/thumbnail.service';
+import { corruptMiddleByte } from '../../shared/testing/corrupt-byte';
 
 /**
  * BUILD_SPEC PHASE 7 — resumable upload. The spec calls this the highest
@@ -284,7 +285,7 @@ describe('P7.2 chunked resumable transport', () => {
     // Corrupt one byte in transit — the client's declared hash is of the
     // ORIGINAL bytes, so the server's recomputation must disagree.
     const corrupted = new Uint8Array(fixture.bytes);
-    corrupted[Math.floor(corrupted.length / 2)] ^= 0xff;
+    corruptMiddleByte(corrupted);
     await client.send(reg.fileId, corrupted, 0);
 
     await expect(client.complete(reg.fileId)).rejects.toThrow(ChecksumMismatchError);
@@ -433,7 +434,7 @@ describe('P7.3 gzip transfer encoding', () => {
     if (fixture === undefined) throw new Error('fixture missing');
 
     const compressed = new Uint8Array(gzipSync(Buffer.from(fixture.bytes)));
-    compressed[Math.floor(compressed.length / 2)] ^= 0xff;
+    corruptMiddleByte(compressed);
 
     const reg = await runWithContext(ctx(doctor), () =>
       uploads.registerFile({

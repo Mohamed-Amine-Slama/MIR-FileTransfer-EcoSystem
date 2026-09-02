@@ -32,6 +32,7 @@ import { LocalBlobStore } from '../../shared/storage/local-blob-store';
 import { BLOB_STORE } from '../../shared/storage/storage.module';
 import { UploadService } from './internal/upload.service';
 import { UploadsController } from './internal/uploads.controller';
+import { corruptByte } from '../../shared/testing/corrupt-byte';
 
 /**
  * BUILD_SPEC P7.1 over HTTP.
@@ -263,7 +264,7 @@ describe('P7.2 chunked transfer over HTTP', () => {
     // never accepted, never "repaired").
     for (let i = 0, offset = 0; offset < body.length; i += 1, offset += chunkSize) {
       const chunk = Buffer.from(body.subarray(offset, Math.min(offset + chunkSize, body.length)));
-      if (offset + chunkSize >= body.length) chunk[0] ^= 0xff;
+      if (offset + chunkSize >= body.length) corruptByte(chunk, 0);
       await client
         .put(`/uploads/files/${fileId}/chunks/${i}`)
         .set('content-type', 'application/octet-stream')

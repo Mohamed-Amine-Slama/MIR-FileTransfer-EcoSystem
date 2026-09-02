@@ -30,7 +30,15 @@ import { RequestContextMiddleware } from '../context/request-context.middleware'
 const ISSUER = 'https://auth.test.local/realms/mir';
 const AUDIENCE = 'mir-api';
 
-let privateKey: CryptoKey;
+/**
+ * Derived from jose rather than written as `CryptoKey`.
+ *
+ * `CryptoKey` is a DOM global, and this project's `lib` is ES2022 with no DOM —
+ * so the name does not resolve here. Taking the type from the function that
+ * produces the value is also the version-proof spelling: jose has changed what
+ * `generateKeyPair` returns between majors, and this follows it.
+ */
+let privateKey: Awaited<ReturnType<typeof generateKeyPair>>['privateKey'];
 let publicJwk: JWK;
 let jwksServer: import('node:http').Server;
 let jwksUrl: string;

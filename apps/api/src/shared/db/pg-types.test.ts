@@ -66,10 +66,10 @@ describe('PostgreSQL type parsing', () => {
   });
 
   it('does not shift the date when the server runs east of UTC', async () => {
-    const original = process.env.TZ;
+    const original = process.env['TZ'];
     try {
       // Tripoli is UTC+2. Under the old behaviour this produced 1985-06-14.
-      process.env.TZ = 'Africa/Tripoli';
+      process.env['TZ'] = 'Africa/Tripoli';
 
       const doctor = await createUser(h.owner, 'libya_doctor');
       const patient = await createPatient(h.owner, doctor);
@@ -84,8 +84,8 @@ describe('PostgreSQL type parsing', () => {
 
       expect(readBack).toBe('1985-06-15');
     } finally {
-      if (original === undefined) delete process.env.TZ;
-      else process.env.TZ = original;
+      if (original === undefined) delete process.env['TZ'];
+      else process.env['TZ'] = original;
     }
   });
 
