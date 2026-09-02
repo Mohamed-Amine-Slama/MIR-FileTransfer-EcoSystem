@@ -82,7 +82,11 @@ function ProviderOnly({ children }: { children: React.ReactNode }): React.JSX.El
 }
 
 function seatRoleLabel(t: Dictionary, seatRole: SeatRole): string {
-  const labels: Record<SeatRole, string> = { owner: t.seatOwner, member: t.seatMember };
+  const labels: Record<SeatRole, string> = {
+    owner: t.seatOwner,
+    member: t.seatMember,
+    assistant: t.seatAssistant,
+  };
   return labels[seatRole];
 }
 

@@ -3,8 +3,8 @@ import {
   Bell,
   Briefcase,
   Building2,
+  CalendarClock,
   CalendarDays,
-  Clock,
   FolderKanban,
   Inbox,
   ScrollText,
@@ -29,6 +29,10 @@ import type { Dictionary } from '../../lib/i18n/dictionary';
  *    here. Only `patient`, `admin`, and `applicant` appear literally, because
  *    none of them is a corridor endpoint — a patient is not a party to a
  *    referral, and an applicant has not been granted a side yet.
+ *
+ *    `assistant` is named literally for the same reason as those three: an
+ *    assistant is seated in a practice rather than playing a side of a
+ *    corridor, so `rolesForSides` has nothing to say about them.
  *
  *    This is also why `components/AppShell.tsx` could be removed from the
  *    ratcheting allowlist in `lib/corridor/no-hardcoded-corridor.test.ts`.
@@ -113,11 +117,13 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         Icon: CalendarDays,
       },
       {
-        href: '/doctor/availability',
-        labelKey: 'navAvailability',
-        descriptionKey: 'availabilityDescription',
-        roles: DESTINATION_ROLES,
-        Icon: Clock,
+        // Replaces the bare /doctor/availability form. Both corridor sides run
+        // a diary, and a seated assistant runs it on the doctor's behalf.
+        href: '/schedule',
+        labelKey: 'navSchedule',
+        descriptionKey: 'scheduleDescription',
+        roles: [...PROVIDER_ROLES, 'assistant'],
+        Icon: CalendarClock,
       },
       {
         href: '/consent',

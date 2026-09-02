@@ -89,11 +89,11 @@ function NewPatientForm(): React.JSX.Element {
         confirmedDistinctFrom,
       });
 
-      if (result.status === 'confirmation_required') {
-        setDuplicates(result.candidates ?? []);
+      if (result.kind === 'confirmation_required') {
+        setDuplicates(result.candidates);
         return;
       }
-      if (result.patientId !== undefined) router.push(`/patients/${result.patientId}`);
+      router.push(`/patients/${result.patientId}`);
     } catch {
       setError(t.genericError);
     } finally {

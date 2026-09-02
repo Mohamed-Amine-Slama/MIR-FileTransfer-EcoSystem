@@ -50,6 +50,8 @@ export type TemplateId =
   | 'upload_complete'
   | 'booking_confirmed'
   | 'appointment_reminder'
+  | 'appointment_moved'
+  | 'appointment_cancelled'
   | 'consent_revoked'
   | 'payment_failed';
 
@@ -139,6 +141,47 @@ export const TEMPLATES: Record<TemplateId, TemplateDefinition> = {
     emailBody: {
       ar: 'تذكير: لديك موعد مع {{doctorName}} في {{appointmentTime}}.',
       fr: 'Rappel : rendez-vous avec {{doctorName}} le {{appointmentTime}}.',
+    },
+  },
+
+  /**
+   * The practice moved an appointment.
+   *
+   * Carries the NEW time only. A message naming both times is longer than one
+   * SMS in Arabic, and the old time is not what the patient has to act on.
+   */
+  appointment_moved: {
+    allowed: ['appointmentTime', 'doctorName', 'link'],
+    sms: {
+      ar: 'تم تغيير موعدك مع {{doctorName}} إلى {{appointmentTime}}. {{link}}',
+      fr: 'Votre rendez-vous avec {{doctorName}} est déplacé au {{appointmentTime}}. {{link}}',
+    },
+    emailSubject: { ar: 'تغيير موعد', fr: 'Rendez-vous déplacé' },
+    emailBody: {
+      ar: 'تم تغيير موعدك مع {{doctorName}} إلى {{appointmentTime}}. {{link}}',
+      fr: 'Votre rendez-vous avec {{doctorName}} est déplacé au {{appointmentTime}}. {{link}}',
+    },
+  },
+
+  /**
+   * The practice cancelled an appointment.
+   *
+   * THE REASON IS DELIBERATELY NOT HERE. `AppointmentCancelled` carries one, and
+   * it is free text a receptionist typed — which is exactly the kind of field
+   * the note at the top of this file says does not belong in a notification. It
+   * is shown in the app, behind a login, where the audit log also has it. The
+   * message's job is to make sure the patient does not travel.
+   */
+  appointment_cancelled: {
+    allowed: ['appointmentTime', 'doctorName', 'link'],
+    sms: {
+      ar: 'تم إلغاء موعدك مع {{doctorName}} في {{appointmentTime}}. للتفاصيل: {{link}}',
+      fr: 'Votre rendez-vous avec {{doctorName}} du {{appointmentTime}} est annulé. Détails : {{link}}',
+    },
+    emailSubject: { ar: 'إلغاء موعد', fr: 'Rendez-vous annulé' },
+    emailBody: {
+      ar: 'تم إلغاء موعدك مع {{doctorName}} في {{appointmentTime}}. للتفاصيل: {{link}}',
+      fr: 'Votre rendez-vous avec {{doctorName}} du {{appointmentTime}} est annulé. Détails : {{link}}',
     },
   },
 

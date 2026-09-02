@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { isClinicalRole, type Role } from '@mir/contracts';
+import { requiresSecondFactor, type Role } from '@mir/contracts';
 import { randomUUID } from 'node:crypto';
 import type { Request } from 'express';
 import { APP_CONFIG } from '../config/config.module';
@@ -67,10 +67,15 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('Authentication required');
     }
 
-    // P4.3 — clinical accounts must have completed a second factor. Enforced
-    // here as well as in the Keycloak flow, so a realm misconfiguration cannot
-    // quietly downgrade doctors to single-factor.
-    if (isClinicalRole(identity.role) && !identity.mfaSatisfied) {
+    // P4.3 — accounts that reach patient data must have completed a second
+    // factor. Enforced here as well as in the Keycloak flow, so a realm
+    // misconfiguration cannot quietly downgrade them to single-factor.
+    //
+    // The set is `requiresSecondFactor`, not `isClinicalRole`: an assistant is
+    // not clinical and must not be treated as such anywhere access is granted,
+    // but the account can still see who is attending the clinic and on what
+    // number, which is worth protecting the same way.
+    if (requiresSecondFactor(identity.role) && !identity.mfaSatisfied) {
       throw new ForbiddenException('Multi-factor authentication required');
     }
 

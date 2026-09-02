@@ -36,14 +36,16 @@ export class PatientsController {
   constructor(private readonly patients: PatientsService) {}
 
   /** Search by phone. Phone only — never by name (P3.3). */
-  @RequiresRole('libya_doctor')
+  // Both sides book appointments, and both need to find the patient by phone
+  // first. Phone-only, and RLS still returns only the caller's own records.
+  @RequiresRole('libya_doctor', 'tunisia_doctor')
   @Get('search')
   async search(@Query('phone') phone: string): Promise<{ candidates: PatientCandidate[] }> {
     const candidates = await this.patients.findByPhone(phone ?? '');
     return { candidates };
   }
 
-  @RequiresRole('libya_doctor')
+  @RequiresRole('libya_doctor', 'tunisia_doctor')
   @Get()
   async list(): Promise<{ patients: PatientCandidate[] }> {
     return { patients: await this.patients.list() };
@@ -56,7 +58,17 @@ export class PatientsController {
    * not an error, because the doctor has a decision to make. Creating on a
    * phone match without asking would be the silent merge P3.3 forbids.
    */
-  @RequiresRole('libya_doctor')
+  /**
+   * `tunisia_doctor` is here as of the practice calendar. D1 gives the
+   * REFERRING doctor the creation of a referral's patient, and that is still
+   * how a referral works — but a receiving clinic also has walk-ins of its own,
+   * who are not part of any referral and have to be written down somewhere.
+   *
+   * It widens nothing: `patients_creator_insert` still requires
+   * `created_by_doctor = app_current_user_id()`, so either side reaches exactly
+   * the records it created and no others.
+   */
+  @RequiresRole('libya_doctor', 'tunisia_doctor')
   @Post()
   @HttpCode(200)
   async create(@Body() body: unknown): Promise<CreatePatientResult> {

@@ -7,8 +7,8 @@ import { api, type Appointment, type Study } from '../../../lib/api/endpoints';
 import { useDateFormat, useT } from '../../../lib/i18n/provider';
 import { RoleGate } from '../../../components/RoleGate';
 import { AppointmentStatusBadge } from '../../../components/AppointmentStatusBadge';
+import { isLiveAppointment } from '../../../lib/scheduling/status';
 import {
-import { isLiveAppointment } from '../../lib/scheduling/status';
   Alert,
   Breadcrumbs,
   Button,

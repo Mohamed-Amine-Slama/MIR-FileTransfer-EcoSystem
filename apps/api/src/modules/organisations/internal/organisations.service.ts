@@ -279,16 +279,43 @@ export class OrganisationsService {
     if (organisation === null) return null;
 
     if (organisation.verification.status === 'approved') {
-      const role = corridorRoleFor(organisation.corridorId, organisation.side);
-      if (role !== null) {
+      // WHICH ROLE DEPENDS ON THE SEAT, and the seat is read back from the
+      // membership the function just created rather than from the invitation —
+      // the invitation is consumed by then, and the membership is the record
+      // that will still be there tomorrow.
+      const seatRole = await this.db.tx(async (tx) => {
+        const res = await tx.query<{ seat_role: SeatRole }>(
+          `SELECT seat_role FROM identity_memberships
+           WHERE organisation_id = $1 AND user_id = $2`,
+          [organisationId, ctx.userId],
+        );
+        return res.rows[0]?.seat_role ?? null;
+      });
+
+      if (seatRole === 'assistant') {
+        // Deliberately NOT the corridor role. An assistant seat must never
+        // resolve to a clinical account, and `identity_grant_membership_role`
+        // would refuse 'assistant' anyway — the two grants are separate
+        // functions so that neither can be talked into doing the other's job.
         await this.db.tx(async (tx) => {
-          await tx.query('SELECT identity_grant_membership_role($1, $2, $3)', [
+          await tx.query('SELECT identity_grant_assistant_role($1, $2)', [
             organisationId,
             ctx.userId,
-            role,
           ]);
         });
-        await this.grantRealmRole(ctx.userId, role);
+        await this.grantRealmRole(ctx.userId, 'assistant');
+      } else {
+        const role = corridorRoleFor(organisation.corridorId, organisation.side);
+        if (role !== null) {
+          await this.db.tx(async (tx) => {
+            await tx.query('SELECT identity_grant_membership_role($1, $2, $3)', [
+              organisationId,
+              ctx.userId,
+              role,
+            ]);
+          });
+          await this.grantRealmRole(ctx.userId, role);
+        }
       }
     }
 

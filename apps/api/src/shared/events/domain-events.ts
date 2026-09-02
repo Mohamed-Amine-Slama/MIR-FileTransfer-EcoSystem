@@ -64,6 +64,50 @@ export interface AppointmentBooked extends DomainEventBase {
   startsAt: Date;
 }
 
+/**
+ * An appointment moved to a different time.
+ *
+ * Carries the NEW instant. The old one is not repeated here: it is already in
+ * the audit log via this event's own record of the change, and a notification
+ * that says only "your appointment moved to X" is the one a patient can act on.
+ */
+export interface AppointmentRescheduled extends DomainEventBase {
+  type: 'AppointmentRescheduled';
+  appointmentId: string;
+  patientId: string;
+  doctorId: string;
+  startsAt: Date;
+}
+
+/**
+ * The practice cancelled an appointment.
+ *
+ * `reason` is a short scheduling note, never a clinical one — it reaches the
+ * patient, and this system holds no medical record to quote from.
+ */
+export interface AppointmentCancelled extends DomainEventBase {
+  type: 'AppointmentCancelled';
+  appointmentId: string;
+  patientId: string;
+  doctorId: string;
+  startsAt: Date;
+  reason?: string;
+}
+
+/**
+ * An appointment is close enough to remind the patient about.
+ *
+ * Raised by the periodic sweep, not by a request, so its actor is the system
+ * identity rather than a person.
+ */
+export interface AppointmentReminderDue extends DomainEventBase {
+  type: 'AppointmentReminderDue';
+  appointmentId: string;
+  patientId: string;
+  doctorId: string;
+  startsAt: Date;
+}
+
 export interface PaymentSucceeded extends DomainEventBase {
   type: 'PaymentSucceeded';
   appointmentId: string;
@@ -98,6 +142,9 @@ export type DomainEvent =
   | ConsentRevoked
   | StudyUploadCompleted
   | AppointmentBooked
+  | AppointmentRescheduled
+  | AppointmentCancelled
+  | AppointmentReminderDue
   | PaymentSucceeded
   | StudyAccessed;
 

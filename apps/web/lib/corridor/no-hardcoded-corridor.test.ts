@@ -15,6 +15,11 @@ import { describe, expect, it } from 'vitest';
  * and still branch on role literals. `ALLOWED` lists them, and the list may
  * only ever SHRINK. Deleting an entry as each screen is migrated is what turns
  * the rule into a ratchet rather than a comment nobody enforces.
+ *
+ * `app/doctor/availability/page.tsx` came off the list when /schedule replaced
+ * it: the new workspace gates on PROVIDER_ROLES rather than naming the
+ * receiving role, so both corridor sides get a calendar from the same screen.
+ * The route now 308s to /schedule/availability (next.config.mjs).
  */
 
 // Resolved from this file, not from cwd, so the test does not depend on where
@@ -27,7 +32,6 @@ const ALLOWED = new Set([
   'app/appointments/new/page.tsx',
   'app/appointments/page.tsx',
   'app/consent/page.tsx',
-  'app/doctor/availability/page.tsx',
   'app/doctor/page.tsx',
   'app/layout.tsx',
   'app/page.tsx',

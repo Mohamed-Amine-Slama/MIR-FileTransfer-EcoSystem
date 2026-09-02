@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Role } from '@mir/contracts';
 
@@ -94,4 +95,29 @@ export function requireContext(): RequestContext {
   const ctx = getContext();
   if (ctx === undefined) throw new MissingRequestContextError();
   return ctx;
+}
+
+/**
+ * Identity for work that has no user session — a provider webhook, a periodic
+ * sweep.
+ *
+ * NOT A BYPASS. It is the same `mir_app` connection with an explicit role in
+ * the session context, subject to every policy a request is (§17). What it
+ * grants is exactly what the `*_admin` policies grant and nothing more: an
+ * admin identity cannot see a single imaging study, and the P3.2 suite asserts
+ * that.
+ *
+ * The nil-ish UUID is deliberate and stable: `app_current_user_id()` must parse
+ * as a uuid, and the admin policies turn on the ROLE rather than the id, so
+ * this identifies "the system" in the audit log without impersonating a person.
+ */
+export function systemContext(userAgent: string): RequestContext {
+  return {
+    userId: '00000000-0000-7000-8000-000000000000',
+    role: 'admin',
+    triageBeforePayment: false,
+    ipAddress: undefined,
+    userAgent,
+    requestId: randomUUID(),
+  };
 }

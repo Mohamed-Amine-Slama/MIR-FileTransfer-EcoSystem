@@ -70,11 +70,22 @@ export interface Patient {
   nationalId?: string;
 }
 
-export interface CreatePatientResult {
-  status: 'created' | 'confirmation_required';
-  patientId?: string;
-  candidates?: Patient[];
-}
+/**
+ * DISCRIMINATED ON `kind`, matching the API.
+ *
+ * This was declared with a `status` field and optional members, which the API
+ * has never sent — it returns `{ kind: 'created' | 'confirmation_required' }`.
+ * Nothing failed loudly: `result.status` was simply always `undefined`, so the
+ * near-duplicate confirmation branch could not fire and a possible duplicate
+ * was created silently. Merging two patients is the worst failure this system
+ * can produce, and that guard was the screen that existed to prevent it.
+ *
+ * A union rather than optional fields, so `patientId` is only reachable on the
+ * branch that actually carries one.
+ */
+export type CreatePatientResult =
+  | { kind: 'created'; patientId: string }
+  | { kind: 'confirmation_required'; candidates: Patient[] };
 
 export interface Study {
   id: string;
@@ -97,16 +108,45 @@ export interface Slot {
   endsAt: string;
 }
 
+export type AppointmentKind = 'consultation' | 'follow_up' | 'imaging' | 'other';
+
 export interface Appointment {
   id: string;
   patientId: string;
   patientName?: string;
+  /** Only ever sent to an assistant, whose job is to ring the patient. */
+  patientPhone?: string;
   doctorId: string;
   doctorName?: string;
   startsAt: string;
   endsAt: string;
   status: 'pending_payment' | 'authorised' | 'confirmed' | 'cancelled' | 'completed' | 'no_show';
+  kind: AppointmentKind;
+  reason: string | null;
+  notes: string | null;
   studyIds: string[];
+}
+
+/** A weekly opening-hours rule, in the clinic's own wall-clock time. */
+export interface AvailabilityRule {
+  id: string;
+  doctorId: string;
+  /** ISO-8601: 1 = Monday .. 7 = Sunday. */
+  weekday: number;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+  slotMinutes: number;
+  validFrom: string;
+  validUntil: string | null;
+}
+
+export interface AvailabilityWindow {
+  id: string;
+  doctorId: string;
+  startsAt: string;
+  endsAt: string;
+  slotMinutes: number;
 }
 
 export interface ConsentTerms {
@@ -201,7 +241,18 @@ export const api = {
       apiFetch<{ slots: Slot[] }>(
         `/doctors/${doctorId}/slots?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
       ),
-    listAppointments: () => apiFetch<{ appointments: Appointment[] }>('/appointments'),
+    /**
+     * `from`/`to` bound what comes back. The calendar asks for the week it is
+     * showing rather than the whole history, which is also what keeps a busy
+     * practice's agenda from growing without limit.
+     */
+    listAppointments: (range?: { from?: string; to?: string }) => {
+      const q = new URLSearchParams();
+      if (range?.from !== undefined) q.set('from', range.from);
+      if (range?.to !== undefined) q.set('to', range.to);
+      const suffix = q.toString() === '' ? '' : `?${q.toString()}`;
+      return apiFetch<{ appointments: Appointment[] }>(`/appointments${suffix}`);
+    },
     getAppointment: (id: string) => apiFetch<Appointment>(`/appointments/${id}`),
     book: (input: {
       patientId: string;
@@ -209,6 +260,9 @@ export const api = {
       startsAt: string;
       endsAt: string;
       studyIds: string[];
+      kind?: AppointmentKind;
+      reason?: string;
+      notes?: string;
     }) =>
       apiFetch<Appointment>('/appointments', {
         method: 'POST',
@@ -225,12 +279,67 @@ export const api = {
       }),
     decline: (id: string) =>
       apiFetch<{ status: 'declined' }>(`/appointments/${id}/decline`, { method: 'POST' }),
-    addAvailability: (input: { startsAt: string; endsAt: string; slotMinutes: number }) =>
-      apiFetch<{ id: string }>('/availability', { method: 'POST', body: input }),
-    listAvailability: () =>
-      apiFetch<{ windows: { id: string; startsAt: string; endsAt: string; slotMinutes: number }[] }>(
-        '/availability',
+    addAvailability: (input: {
+      startsAt: string;
+      endsAt: string;
+      slotMinutes: number;
+      doctorId?: string;
+    }) => apiFetch<{ id: string }>('/availability', { method: 'POST', body: input }),
+    listAvailability: (doctorId?: string) =>
+      apiFetch<{ windows: AvailabilityWindow[] }>(
+        doctorId === undefined ? '/availability' : `/availability?doctorId=${doctorId}`,
       ),
+
+    // --- running the diary -------------------------------------------------
+
+    /** Move an appointment. A taken slot answers 409, never a 500. */
+    reschedule: (id: string, startsAt: string, endsAt: string) =>
+      apiFetch<Appointment>(`/appointments/${id}/time`, {
+        method: 'PATCH',
+        body: { startsAt, endsAt },
+      }),
+    /** Scheduling detail only — never the time; that is `reschedule`. */
+    updateAppointment: (
+      id: string,
+      patch: { kind?: AppointmentKind; reason?: string | null; notes?: string | null },
+    ) => apiFetch<Appointment>(`/appointments/${id}`, { method: 'PATCH', body: patch }),
+    complete: (id: string) =>
+      apiFetch<{ status: string }>(`/appointments/${id}/complete`, { method: 'POST' }),
+    noShow: (id: string) =>
+      apiFetch<{ status: string }>(`/appointments/${id}/no-show`, { method: 'POST' }),
+    /**
+     * The practice cancelling, which is not `cancel` — that is the patient
+     * withdrawing. The reason reaches the patient, so they can tell a clinic
+     * closure from their own booking lapsing.
+     */
+    cancelAsDoctor: (id: string, reason?: string) =>
+      apiFetch<{ status: string }>(`/appointments/${id}/cancel`, {
+        method: 'POST',
+        body: { ...(reason === undefined ? {} : { reason }) },
+      }),
+
+    // --- availability upkeep -----------------------------------------------
+
+    withdrawAvailability: (id: string) =>
+      apiFetch<void>(`/availability/${id}`, { method: 'DELETE' }),
+    listRules: (doctorId?: string) =>
+      apiFetch<{ rules: AvailabilityRule[] }>(
+        doctorId === undefined ? '/availability/rules' : `/availability/rules?doctorId=${doctorId}`,
+      ),
+    addRule: (input: {
+      weekday: number;
+      startTime: string;
+      endTime: string;
+      timezone: string;
+      slotMinutes?: number;
+      doctorId?: string;
+    }) =>
+      apiFetch<{ id: string; generated: number }>('/availability/rules', {
+        method: 'POST',
+        body: input,
+      }),
+    withdrawRule: (id: string) =>
+      apiFetch<void>(`/availability/rules/${id}`, { method: 'DELETE' }),
   },
 
   billing: {

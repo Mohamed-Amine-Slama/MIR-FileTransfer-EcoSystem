@@ -196,13 +196,19 @@ describe('P4.4 audit module', () => {
       subscriber.onModuleInit();
 
       // The exhaustive list from §5.2, plus the revocation event the spec's
-      // table omits but P5.3 requires.
+      // table omits but P5.3 requires, plus the two appointment changes the
+      // practice calendar introduced — moving or cancelling someone's
+      // appointment is as patient-affecting as making it, and the log is what a
+      // patient disputing either would be shown.
       const expected: DomainEventType[] = [
         'PatientCreated',
         'ConsentGranted',
         'ConsentRevoked',
         'StudyUploadCompleted',
         'AppointmentBooked',
+        'AppointmentRescheduled',
+        'AppointmentCancelled',
+        'AppointmentReminderDue',
         'PaymentSucceeded',
         'StudyAccessed',
       ];

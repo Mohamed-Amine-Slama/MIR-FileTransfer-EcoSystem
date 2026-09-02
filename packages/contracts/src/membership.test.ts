@@ -2,8 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { hasSeatAvailable, invitationSchema, seatRoleSchema } from './membership';
 
 describe('seat roles', () => {
-  it('has exactly two levels, so an unused permission tier cannot rot', () => {
-    expect(seatRoleSchema.options).toEqual(['owner', 'member']);
+  /**
+   * Was two, deliberately, so that an unused permission tier could not rot.
+   * `assistant` is the third and it is not a speculative tier: the practice
+   * calendar needs somebody who books appointments, and the requirement arrived
+   * with a screen that uses it.
+   *
+   * It is also unlike the other two in kind, which is the guard worth keeping.
+   * `owner` and `member` are degrees of authority over the ORGANISATION and both
+   * resolve to a clinical role; `assistant` grants nothing over the organisation
+   * and resolves to the non-clinical `assistant` role. A fourth value proposed
+   * as "member but slightly less" should still be refused.
+   */
+  it('has three levels, the third being a job rather than a permission tier', () => {
+    expect(seatRoleSchema.options).toEqual(['owner', 'member', 'assistant']);
   });
 });
 

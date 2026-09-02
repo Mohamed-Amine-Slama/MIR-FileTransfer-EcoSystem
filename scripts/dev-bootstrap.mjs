@@ -87,6 +87,7 @@ const ACCOUNTS = [
   { username: 'dev-patient@example.test',   role: 'patient',         name: 'Sample Patient',     phone: '+218911000003', password: 'dev-patient-pass-1234' },
   { username: 'dev-ops@example.test',       role: 'admin',           name: 'Ops Staff',          phone: '+216711000004', password: 'dev-ops-pass-1234' },
   { username: 'dev-applicant@example.test', role: 'applicant',       name: 'Dr Pending Applicant', phone: '+218911000005', password: 'dev-applicant-pass-1234' },
+  { username: 'dev-assistant@example.test', role: 'assistant',       name: 'Salma Reception',    phone: '+216711000006', password: 'dev-assist-pass-1234' },
 ];
 
 /**
@@ -205,7 +206,7 @@ async function configureRealm() {
  * registered account authenticates as nobody.
  */
 async function ensureRoles() {
-  for (const name of ['libya_doctor', 'tunisia_doctor', 'patient', 'admin', 'applicant']) {
+  for (const name of ['libya_doctor', 'tunisia_doctor', 'patient', 'admin', 'applicant', 'assistant']) {
     const found = await kcAdmin(`/${REALM}/roles/${encodeURIComponent(name)}`);
     if (found.ok) continue;
     const res = await kcAdmin(`/${REALM}/roles`, {
@@ -402,6 +403,7 @@ function buildSeedSql(subs) {
   const receiver = id('dev-receiver@example.test');
   const patientUser = id('dev-patient@example.test');
   const applicant = id('dev-applicant@example.test');
+  const assistant = id('dev-assistant@example.test');
 
   const lines = ['BEGIN;'];
 
@@ -589,6 +591,11 @@ function buildSeedSql(subs) {
     `INSERT INTO identity_memberships (organisation_id, user_id, seat_role)
      SELECT o.id, ${q(applicant)}::uuid, 'owner' FROM identity_organisations o
      WHERE o.legal_name = ${q(pending)} ON CONFLICT DO NOTHING;`,
+    // The assistant shares the approved clinic with BOTH doctors seated above,
+    // which is what makes app_assists_doctor() true for either of them.
+    `INSERT INTO identity_memberships (organisation_id, user_id, seat_role)
+     SELECT o.id, ${q(assistant)}::uuid, 'assistant' FROM identity_organisations o
+     WHERE o.legal_name = ${q(approved)} ON CONFLICT DO NOTHING;`,
     `INSERT INTO billing_subscriptions
        (organisation_id, plan_code, status, seats, period_start, period_end)
      SELECT o.id, 'clinic', 'active', 5, date_trunc('month', now()),

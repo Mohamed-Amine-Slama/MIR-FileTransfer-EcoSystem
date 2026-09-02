@@ -23,8 +23,29 @@ export class NotificationsSubscriber implements OnModuleInit {
       this.queue('upload_complete', { fileCount: String(event.fileCount) });
     });
 
-    this.bus.subscribe('AppointmentBooked', () => {
-      // Booked is not yet confirmed (D2): the message goes out on payment.
+    this.bus.subscribe('AppointmentBooked', (event) => {
+      // D2 says a PATIENT's booking is not yet confirmed when it is made — the
+      // money is only held, and the message goes out on payment. That reasoning
+      // is about the payment step, and an appointment the practice itself
+      // enters has no payment step to wait for: it is confirmed the moment the
+      // receptionist writes it down. So the caller's role decides.
+      if (event.actorRole === 'patient') return;
+      this.queue('booking_confirmed', {});
+    });
+
+    this.bus.subscribe('AppointmentReminderDue', () => {
+      this.queue('appointment_reminder', {});
+    });
+
+    this.bus.subscribe('AppointmentRescheduled', () => {
+      this.queue('appointment_moved', {});
+    });
+
+    this.bus.subscribe('AppointmentCancelled', () => {
+      // Note what is NOT forwarded: the event's `reason`. It is free text a
+      // receptionist typed, and this file's whole guarantee is that a
+      // notification cannot carry something a template author never anticipated.
+      this.queue('appointment_cancelled', {});
     });
 
     this.bus.subscribe('PaymentSucceeded', () => {

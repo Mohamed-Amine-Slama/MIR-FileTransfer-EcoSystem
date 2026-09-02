@@ -40,6 +40,17 @@ export const RATE_LIMITS = {
     baseLockoutMs: 5 * 60_000,
     maxLockoutMs: 4 * 60 * 60_000,
   },
+  scheduleWrite: {
+    // A receptionist working through a morning's calls legitimately creates and
+    // moves a great many appointments, so this is deliberately generous — it
+    // exists to bound a script hammering the booking endpoint, not to pace a
+    // human doing their job. Throttling a practice mid-morning is its own kind
+    // of harm, the same argument uploadInit makes below.
+    limit: 120,
+    windowMs: 60_000,
+    baseLockoutMs: 30_000,
+    maxLockoutMs: 10 * 60_000,
+  },
   uploadInit: {
     // Generous: a clinic legitimately starts many study uploads in a session.
     // This is abuse protection, not a workflow constraint — throttling a

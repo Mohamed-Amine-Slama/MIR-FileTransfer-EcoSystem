@@ -202,6 +202,9 @@ function subjectTypeFor(event: DomainEvent): string {
     case 'StudyAccessed':
       return 'study';
     case 'AppointmentBooked':
+    case 'AppointmentRescheduled':
+    case 'AppointmentCancelled':
+    case 'AppointmentReminderDue':
       return 'appointment';
     case 'PaymentSucceeded':
       return 'payment';
@@ -219,6 +222,9 @@ function subjectIdFor(event: DomainEvent): string | undefined {
     case 'StudyAccessed':
       return event.studyId;
     case 'AppointmentBooked':
+    case 'AppointmentRescheduled':
+    case 'AppointmentCancelled':
+    case 'AppointmentReminderDue':
       return event.appointmentId;
     case 'PaymentSucceeded':
       return event.paymentId;
@@ -259,7 +265,17 @@ function metadataFor(event: DomainEvent): Record<string, unknown> {
     case 'ConsentRevoked':
       return { grantedTo: event.grantedTo };
     case 'AppointmentBooked':
+    case 'AppointmentRescheduled':
+    case 'AppointmentReminderDue':
       return { doctorId: event.doctorId, startsAt: event.startsAt.toISOString() };
+    case 'AppointmentCancelled':
+      return {
+        doctorId: event.doctorId,
+        startsAt: event.startsAt.toISOString(),
+        // A short scheduling note. Never clinical — the event carries no
+        // clinical field for a careless subscriber to reach for.
+        ...(event.reason === undefined ? {} : { reason: event.reason }),
+      };
     case 'PaymentSucceeded':
       return {
         appointmentId: event.appointmentId,
