@@ -9,9 +9,27 @@ import { endpointSideSchema } from './corridor';
  * a provider rather than being one.
  */
 
-export const PROVIDER_KINDS = ['clinic', 'laboratory', 'doctor'] as const;
+/**
+ * What kind of organisation is applying.
+ *
+ * `hospital` is distinct from `clinic` and not a synonym for it: a hospital
+ * PROVISIONS the clinicians who work inside it — it invites their accounts and
+ * routes appointments to them by specialty — and a one-room clinic or a solo
+ * `doctor` account must not carry that power. The capability is gated on this
+ * value, so collapsing the two would hand every practice the ability to mint
+ * clinical accounts.
+ */
+export const PROVIDER_KINDS = ['clinic', 'hospital', 'laboratory', 'doctor'] as const;
+
 export const providerKindSchema = z.enum(PROVIDER_KINDS);
 export type ProviderKind = z.infer<typeof providerKindSchema>;
+
+/** Kinds that may provision accounts for the clinicians working under them. */
+export const PROVISIONING_KINDS: readonly ProviderKind[] = ['hospital'];
+
+export function canProvisionClinicians(kind: ProviderKind): boolean {
+  return PROVISIONING_KINDS.includes(kind);
+}
 
 /**
  * §5.1 requires the provider to see this state "with no need to contact the

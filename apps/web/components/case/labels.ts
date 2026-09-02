@@ -115,6 +115,7 @@ export function verificationTone(status: VerificationStatus): Tone {
 export function providerKindLabel(t: Dictionary, kind: ProviderKind): string {
   const labels: Record<ProviderKind, string> = {
     clinic: t.signUpKindClinic,
+    hospital: t.signUpKindHospital,
     laboratory: t.signUpKindLaboratory,
     doctor: t.signUpKindDoctor,
   };

@@ -151,7 +151,7 @@ async function attemptBrowserLogin(browser, username, callback) {
   // ERR_NAME_NOT_RESOLVED on the redirect target is itself a completed login:
   // Keycloak issued the code and told the browser to go somewhere that does
   // not exist. Swallow it here; `redirected` above records that it happened.
-  const resp = await page.goto(authUrl, { waitUntil: 'domcontentloaded' }).catch((e) => {
+  await page.goto(authUrl, { waitUntil: 'domcontentloaded' }).catch((e) => {
     if (process.env['MFA_PROBE_DEBUG']) console.log(`        [debug] goto: ${String(e).split('\n')[0]}`);
     return null;
   });

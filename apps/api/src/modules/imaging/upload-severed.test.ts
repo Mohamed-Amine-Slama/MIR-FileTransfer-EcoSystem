@@ -32,6 +32,7 @@ import { LocalBlobStore } from '../../shared/storage/local-blob-store';
 import { BLOB_STORE } from '../../shared/storage/storage.module';
 import { UploadService } from './internal/upload.service';
 import { UploadsController } from './internal/uploads.controller';
+import { corruptByte } from '../../shared/testing/corrupt-byte';
 
 /**
  * BUILD_SPEC P7.2 gate:
@@ -377,7 +378,7 @@ describe('P7.2 upload survives a severed connection', () => {
       for (let i = 0; i < totalChunks; i += 1) {
         const chunk = Buffer.from(body.subarray(i * chunkSize, (i + 1) * chunkSize));
         // Corrupt a chunk in the second half, as a flaky link would.
-        if (i === totalChunks - 2) chunk[0] ^= 0xff;
+        if (i === totalChunks - 2) corruptByte(chunk, 0);
         await putChunk(`${base}/uploads/files/${file.fileId}/chunks/${i}`, doctor, chunk);
       }
 

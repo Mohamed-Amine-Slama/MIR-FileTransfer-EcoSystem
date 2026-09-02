@@ -1,0 +1,18 @@
+{
+  // Type-checks the TEST files, which tsconfig.json deliberately excludes.
+  //
+  // WHY THE EXCLUSION EXISTS AND WHY THIS SITS BESIDE IT.
+  // `tsconfig.json` has rootDir src / outDir dist, so anything it includes gets
+  // EMITTED. Tests must not ship in dist, so they are excluded there — and the
+  // side effect is that `pnpm typecheck` never looked at them. Editors do, so
+  // the editor and CI disagreed: thirteen real errors sat in test files while
+  // `pnpm verify` reported a clean tree.
+  //
+  // noEmit, so this checks without producing output.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
