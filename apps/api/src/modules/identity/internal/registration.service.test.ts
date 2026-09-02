@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { NotImplementedException } from '@nestjs/common';
 import type { DatabaseService } from '../../../shared/db/database.service';
 import type { MailSender } from '../../../shared/mail';
-import type { KeycloakAdminClient } from './keycloak-admin.client';
+import { KeycloakAdminUnauthorizedError, type KeycloakAdminClient } from './keycloak-admin.client';
 import { RegistrationService } from './registration.service';
 
 /**
@@ -81,5 +81,51 @@ describe('RegistrationService.register (P5.1)', () => {
     const { service, calls } = fakes({ createUser: async () => null });
     await service.register(INPUT);
     expect(calls).toEqual([]);
+  });
+});
+
+describe('when Keycloak refuses the admin credential', () => {
+  /**
+   * The failure this covers was reported as "L'opération a échoué" on the
+   * sign-up form. The credential was configured, so `isConfigured()` was true
+   * and the 501 branch did not fire; Keycloak then rejected it with 403 and the
+   * raw error became a 500. The screen has a specific message for 501 and only
+   * a generic one for everything else, so the operator learned nothing.
+   *
+   * (The 403 itself was environmental — a recreated Keycloak resets the realm
+   * to `sslRequired: all` — but "present but refused" is a permanent shape and
+   * has to answer honestly.)
+   */
+  it('answers 501, the same as never having been configured', async () => {
+    const keycloak = {
+      isConfigured: () => true,
+      createUser: () => Promise.reject(new KeycloakAdminUnauthorizedError(403)),
+    } as unknown as KeycloakAdminClient;
+
+    const service = new RegistrationService(
+      {} as unknown as DatabaseService,
+      keycloak,
+      { send: () => Promise.resolve() } as unknown as MailSender,
+    );
+
+    await expect(service.register(INPUT)).rejects.toBeInstanceOf(NotImplementedException);
+  });
+
+  it('still surfaces an unexpected Keycloak failure as itself', async () => {
+    // A 500 from Keycloak is not "not configured" — it is something broken, and
+    // dressing it up as 501 would hide a real outage behind a settings message.
+    const boom = new Error('Keycloak admin token request failed: 502');
+    const keycloak = {
+      isConfigured: () => true,
+      createUser: () => Promise.reject(boom),
+    } as unknown as KeycloakAdminClient;
+
+    const service = new RegistrationService(
+      {} as unknown as DatabaseService,
+      keycloak,
+      { send: () => Promise.resolve() } as unknown as MailSender,
+    );
+
+    await expect(service.register(INPUT)).rejects.toBe(boom);
   });
 });

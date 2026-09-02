@@ -27,6 +27,27 @@ interface TokenResponse {
   expires_in?: unknown;
 }
 
+/**
+ * Keycloak REFUSED the service-account credential.
+ *
+ * Distinguished from every other failure because it means the same thing to a
+ * caller as having no credential at all: sign-up cannot work here. Callers map
+ * it to the same 501 as `isConfigured() === false`.
+ *
+ * `isConfigured()` only proves the variables are PRESENT. This is what happens
+ * when they are present and wrong — the client was deleted, the secret rotated,
+ * or (the usual one in development) Keycloak was recreated, which resets the
+ * realm to `sslRequired: all` and makes it 403 every HTTP token request. That
+ * arrived as a 500 and a generic "the operation failed", which is exactly the
+ * bug-hunt the 501 in RegistrationService exists to prevent.
+ */
+export class KeycloakAdminUnauthorizedError extends Error {
+  constructor(readonly status: number) {
+    super(`Keycloak rejected the admin service-account credential (${status})`);
+    this.name = 'KeycloakAdminUnauthorizedError';
+  }
+}
+
 @Injectable()
 export class KeycloakAdminClient {
   private readonly logger = new Logger('KeycloakAdmin');
@@ -95,6 +116,11 @@ export class KeycloakAdminClient {
       },
     );
 
+    if (res.status === 401 || res.status === 403) {
+      // Present but rejected. Same practical answer as unconfigured, and the
+      // status is kept so the log says which.
+      throw new KeycloakAdminUnauthorizedError(res.status);
+    }
     if (!res.ok) throw new Error(`Keycloak admin token request failed: ${res.status}`);
     const body = (await res.json()) as TokenResponse;
     if (typeof body.access_token !== 'string') {

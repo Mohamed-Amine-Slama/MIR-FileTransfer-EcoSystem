@@ -7,7 +7,7 @@ import {
 import type { RequestContext } from '../../../shared/context/request-context';
 import { DatabaseService } from '../../../shared/db/database.service';
 import { MAIL_SENDER, type MailSender } from '../../../shared/mail';
-import { KeycloakAdminClient } from './keycloak-admin.client';
+import { KeycloakAdminClient, KeycloakAdminUnauthorizedError } from './keycloak-admin.client';
 
 /**
  * Self-service registration — brief §5.1.
@@ -90,11 +90,23 @@ export class RegistrationService {
 
     const email = input.email.trim().toLowerCase();
 
-    const sub = await this.keycloak.createUser({
-      email,
-      fullName: input.fullName,
-      password: input.password,
-    });
+    let sub: string | null;
+    try {
+      sub = await this.keycloak.createUser({
+        email,
+        fullName: input.fullName,
+        password: input.password,
+      });
+    } catch (err) {
+      if (err instanceof KeycloakAdminUnauthorizedError) {
+        // Credential present but refused — indistinguishable, from the person
+        // signing up, from it never having been configured. Same 501, and the
+        // client's own log line records which it was.
+        this.logger.error(err.message);
+        throw new NotImplementedException('self_registration_not_configured');
+      }
+      throw err;
+    }
     // Address already taken upstream. Silence is the answer; see the note above.
     if (sub === null) return;
 

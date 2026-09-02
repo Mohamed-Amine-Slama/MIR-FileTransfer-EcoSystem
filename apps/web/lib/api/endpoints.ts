@@ -1,6 +1,8 @@
 import type {
+  EndpointSide,
   InviteMemberInput,
   Membership,
+  ProviderKind,
   PlanCode,
   PlanTier,
   PlanUsage,
@@ -48,10 +50,16 @@ export interface UserProfile {
 /** The organisation the signed-in user acts for — the durable form of `Provider`. */
 export interface Organisation {
   id: string;
-  kind: 'clinic' | 'laboratory' | 'doctor';
+  /**
+   * From the contract, not restated. The literal union that used to be written
+   * here silently fell behind when `hospital` was added — the shared package is
+   * the one place these are defined, and a second copy is a second thing to
+   * forget.
+   */
+  kind: ProviderKind;
   legalName: string;
   corridorId: string;
-  side: 'source' | 'destination';
+  side: EndpointSide;
   verification: {
     status: 'pending' | 'approved' | 'rejected';
     submittedAt: string;

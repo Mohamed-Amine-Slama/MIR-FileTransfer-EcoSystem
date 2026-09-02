@@ -12,7 +12,8 @@ import {
 } from '@mir/contracts';
 import { api, type Organisation } from '../../../lib/api/endpoints';
 import { CORRIDORS, DEFAULT_CORRIDOR_ID, getCorridor } from '../../../lib/corridor/registry';
-import { useT } from '../../../lib/i18n/provider';
+import { useLocale, useT } from '../../../lib/i18n/provider';
+import { countryName } from '../../../lib/corridor/country-name';
 import { CorridorFields, validateFields } from '../../../components/case/CorridorFields';
 import { providerKindLabel, sideLabel } from '../../../components/case/labels';
 import {
@@ -44,6 +45,7 @@ import {
  */
 export default function ProviderSignUpPage(): React.JSX.Element {
   const t = useT();
+  const { locale } = useLocale();
   const [corridorId, setCorridorId] = useState(DEFAULT_CORRIDOR_ID);
   const [side, setSide] = useState<EndpointSide>('source');
   const [kind, setKind] = useState<ProviderKind>('clinic');
@@ -174,11 +176,32 @@ export default function ProviderSignUpPage(): React.JSX.Element {
           >
             {ENDPOINT_SIDES.map((value) => (
               <option key={value} value={value}>
-                {sideLabel(t, value)}
+                {corridor === null
+                  ? sideLabel(t, value)
+                  : `${countryName(corridor[value].country, locale)} — ${sideLabel(t, value)}`}
               </option>
             ))}
           </Select>
         </Field>
+
+        {/*
+          The choice, read back in the applicant's own words.
+
+          Side and kind are two selectors because the corridor decides which
+          credentials are asked for — but what a person is choosing is one
+          thing: "a hospital on the Libyan side". Saying so removes the step
+          where they have to combine two dropdowns in their head to check they
+          picked the right one. The country comes from the corridor registry via
+          Intl, never from copy, so a second corridor states itself (§4.3).
+        */}
+        <p className="text-sm text-muted-foreground" data-testid="applying-as">
+          {t.signUpApplyingAs}:{' '}
+          <span className="font-medium text-foreground">
+            {corridor === null
+              ? providerKindLabel(t, kind)
+              : `${countryName(corridor[side].country, locale)} · ${providerKindLabel(t, kind)}`}
+          </span>
+        </p>
 
         <Field label={`${t.signUpOrgName} *`} error={errors['legalName'] ?? null}>
           <Input
@@ -194,6 +217,12 @@ export default function ProviderSignUpPage(): React.JSX.Element {
             }}
           />
         </Field>
+
+        {kind === 'hospital' && (
+          <Alert tone="info" testId="hospital-hint">
+            {t.signUpHospitalHint}
+          </Alert>
+        )}
 
         <Field label={t.signUpOrgKind}>
           <Select
