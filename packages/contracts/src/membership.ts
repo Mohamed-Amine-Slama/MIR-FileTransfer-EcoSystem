@@ -20,12 +20,20 @@ import { z } from 'zod';
 /**
  * `owner` may invite, revoke, and change the plan. `member` may not.
  *
- * Deliberately two values. Every finer-grained scheme we might want (a billing
- * admin, a read-only auditor) is a guess about how clinics are actually run,
- * and an unused permission level still has to be rendered, tested, and
- * explained. Add the third when someone asks for it.
+ * This was deliberately two values, on the grounds that every finer-grained
+ * scheme — a billing admin, a read-only auditor — was a guess about how clinics
+ * are actually run, and that the third should wait until someone asked for it.
+ *
+ * `assistant` is that third, and it is not a guess: a practice needs someone who
+ * books the appointments, and the requirement arrived with the practice
+ * calendar. It is unlike the other two in kind, which is the point. `owner` and
+ * `member` are degrees of authority over the ORGANISATION and both imply a
+ * clinical role; `assistant` is a different job. It grants nothing over the
+ * organisation and never yields a clinical role — an assistant seat resolves to
+ * the non-clinical `assistant` role (migration 0015), which reaches a calendar
+ * and no imaging at all.
  */
-export const SEAT_ROLES = ['owner', 'member'] as const;
+export const SEAT_ROLES = ['owner', 'member', 'assistant'] as const;
 export const seatRoleSchema = z.enum(SEAT_ROLES);
 export type SeatRole = z.infer<typeof seatRoleSchema>;
 

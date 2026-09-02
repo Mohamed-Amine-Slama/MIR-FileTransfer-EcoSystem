@@ -1,8 +1,12 @@
-import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { APP_CONFIG } from '../../../shared/config/config.module';
 import type { AppConfig } from '../../../shared/config/config.schema';
-import { requireContext, runWithContext, type RequestContext } from '../../../shared/context/request-context';
+import {
+  requireContext,
+  runWithContext,
+  systemContext as sharedSystemContext,
+  type RequestContext,
+} from '../../../shared/context/request-context';
 import { DatabaseService } from '../../../shared/db/database.service';
 import { EventBus } from '../../../shared/events/event-bus';
 import { PAYMENT_RAIL, type PaymentRail } from './payment-rail.tokens';
@@ -430,14 +434,12 @@ export class BillingService {
   }
 }
 
-/** Identity for provider-initiated work that has no user session. */
+/**
+ * Identity for provider-initiated work that has no user session.
+ *
+ * The shape lives in shared/context now that the scheduling sweep needs the
+ * same thing; this keeps the name billing's callers already import.
+ */
 export function systemContext(): RequestContext {
-  return {
-    userId: '00000000-0000-7000-8000-000000000000',
-    role: 'admin',
-    triageBeforePayment: false,
-    ipAddress: undefined,
-    userAgent: 'stripe-webhook',
-    requestId: randomUUID(),
-  };
+  return sharedSystemContext('stripe-webhook');
 }

@@ -18,6 +18,7 @@ import {
   type Harness,
 } from '../../shared/db/testing/rls-harness';
 import { GlobalExceptionFilter } from '../../shared/errors/global-exception.filter';
+import { REQUIRES_ROLE_KEY } from '../../shared/authz/access-metadata';
 import { PatientsController } from './internal/patients.controller';
 import { PatientsService } from './internal/patients.service';
 
@@ -388,5 +389,46 @@ describe('P5.2 patient claim flow', () => {
     await as(app.getHttpServer(), otherDoctor, 'libya_doctor')
       .post(`/patients/${patientId}/claim-token`)
       .expect(404);
+  });
+});
+
+/**
+ * The decorator and the policy have to agree, and nothing else checks that.
+ *
+ * This suite's guard is a stub that trusts a header, so `@RequiresRole` is not
+ * exercised by the requests above — and the service-level suites call the
+ * service directly, below the controller entirely. A route can therefore be
+ * declared for the wrong roles and every test still passes. That is exactly how
+ * `POST /appointments` came to advertise the referring side while
+ * `scheduling_appointments` had no INSERT policy for it (migration 0014), and
+ * how `POST /patients` kept refusing the receiving side after 0014 gave them
+ * one.
+ *
+ * So: assert the declared roles directly, next to the policy they have to match.
+ */
+describe('declared roles match the policies behind them', () => {
+  // `SetMetadata` used as a METHOD decorator defines metadata on the handler
+  // function itself, not on (prototype, propertyKey) — which is also how the
+  // Reflector reads it at request time.
+  const declared = (method: keyof PatientsController): string[] => {
+    const handler = PatientsController.prototype[method] as unknown as object;
+    return (Reflect.getMetadata(REQUIRES_ROLE_KEY, handler) as string[] | undefined) ?? [];
+  };
+
+  it('lets either doctor register a patient, because either may create one', () => {
+    // `patients_creator_insert` admits both and scopes each to
+    // `created_by_doctor = app_current_user_id()`. A receiving clinic's walk-in
+    // is not part of any referral and still has to be written down somewhere.
+    expect(declared('create').sort()).toEqual(['libya_doctor', 'tunisia_doctor']);
+  });
+
+  it('lets either doctor search by phone, because either may book', () => {
+    expect(declared('search').sort()).toEqual(['libya_doctor', 'tunisia_doctor']);
+  });
+
+  it('keeps claim-token issuing with the referring side alone', () => {
+    // Not widened: issuing a claim token sends an SMS that hands someone
+    // control of a patient record. It belongs with the doctor who created it.
+    expect(declared('issueClaimToken')).toEqual(['libya_doctor']);
   });
 });

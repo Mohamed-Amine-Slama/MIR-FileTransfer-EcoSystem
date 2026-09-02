@@ -20,8 +20,34 @@ import { z } from 'zod';
  * rows — the account is fail-closed by construction rather than by a reviewer
  * remembering to restrict it. The clinical role is assigned only when ops
  * approves the verification.
+ *
+ * WHY `assistant` EXISTS, AND WHY IT IS A ROLE RATHER THAN A SEAT.
+ * A practice is run by more than the doctor: somebody answers the phone and
+ * books the appointments. That person needs to write to a doctor's calendar
+ * and must never reach a scan.
+ *
+ * Modelling them purely as an `identity_memberships.seat_role` was tried first
+ * and does not work. Every policy in this schema turns on `app_current_role()`,
+ * which reads `identity_users.role` — so an assistant left as `applicant` would
+ * match no policy at all, and the fix would be to write policies naming
+ * `applicant`, destroying the fail-closed property described directly above.
+ * The role says WHAT this account is; the membership says WHOSE calendar it may
+ * touch (`app_assists_doctor`, migration 0015). Both are required, and neither
+ * grants anything on its own.
+ *
+ * An assistant is deliberately NOT clinical: no policy grants one imaging,
+ * consent, or patient demographics. What they can read of a patient is a name
+ * and a phone number, returned by a SECURITY DEFINER function that has no
+ * column for anything else.
  */
-export const ROLES = ['libya_doctor', 'tunisia_doctor', 'patient', 'admin', 'applicant'] as const;
+export const ROLES = [
+  'libya_doctor',
+  'tunisia_doctor',
+  'patient',
+  'admin',
+  'applicant',
+  'assistant',
+] as const;
 
 export const roleSchema = z.enum(ROLES);
 export type Role = z.infer<typeof roleSchema>;
@@ -39,6 +65,25 @@ export const CLINICAL_ROLES: readonly Role[] = ['libya_doctor', 'tunisia_doctor'
 
 export function isClinicalRole(role: Role): boolean {
   return CLINICAL_ROLES.includes(role);
+}
+
+/**
+ * Roles that must present a second factor — a SUPERSET of the clinical ones.
+ *
+ * Kept separate rather than by widening CLINICAL_ROLES, because `assistant` is
+ * emphatically not a clinical role and the difference decides real access:
+ * `CLINICAL_ROLES` is what the corridor grants on verification and what the
+ * imaging policies are written against. Adding a receptionist to that list to
+ * get one login check would have quietly proposed them for both.
+ *
+ * An assistant is here because the account can see who is attending a clinic
+ * and on what number to reach them. That is worth a second factor even though
+ * it is not worth a clinical grant.
+ */
+export const SECOND_FACTOR_ROLES: readonly Role[] = [...CLINICAL_ROLES, 'assistant'];
+
+export function requiresSecondFactor(role: Role): boolean {
+  return SECOND_FACTOR_ROLES.includes(role);
 }
 
 /**

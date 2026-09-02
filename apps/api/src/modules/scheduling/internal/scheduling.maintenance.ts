@@ -1,0 +1,90 @@
+import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { APP_CONFIG } from '../../../shared/config/config.module';
+import type { AppConfig } from '../../../shared/config/config.schema';
+import { runWithContext, systemContext } from '../../../shared/context/request-context';
+import { SchedulingService } from './scheduling.service';
+
+/**
+ * The periodic sweep: release lapsed authorisations, send due reminders.
+ *
+ * WHY THERE IS A TIMER HERE AT ALL. `releaseExpiredAuthorisations` has existed
+ * since P10 and nothing ever called it — no cron, no scheduler, no caller
+ * outside its own test. An authorisation that is never captured held its slot
+ * forever, so the one function written to stop that had no effect in
+ * production. `appointment_reminder` was in the same state: a template in two
+ * languages that nothing emitted.
+ *
+ * WHY setInterval AND NOT @nestjs/schedule. It would be the idiomatic choice
+ * and it is one dependency for one timer. This needs no cron expressions, no
+ * decorators and no dynamic job registry — and every added package is
+ * something the dependency scan, the lockfile and CI carry from here on. If a
+ * second scheduled job with real cron semantics ever appears, that is the point
+ * to reach for the library.
+ *
+ * SINGLE-PROCESS ASSUMPTION, stated because it will not hold forever: with more
+ * than one API replica every replica runs this. Re-releasing an authorisation
+ * is harmless (the UPDATE matches nothing the second time), and the reminder is
+ * protected by `reminder_sent_at` being claimed in the same statement that
+ * selects it — so the duplicate work is wasted rather than wrong. A real
+ * multi-replica deployment should still move this behind an advisory lock.
+ */
+
+/** How often the sweep runs. */
+const SWEEP_INTERVAL_MS = 15 * 60_000;
+
+/** How far ahead an appointment must be to earn a reminder. */
+const REMINDER_LEAD_HOURS = 24;
+
+@Injectable()
+export class SchedulingMaintenance implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(SchedulingMaintenance.name);
+  private timer: NodeJS.Timeout | undefined;
+  /** Guards against a slow sweep overlapping the next tick. */
+  private running = false;
+
+  constructor(
+    private readonly scheduling: SchedulingService,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
+  ) {}
+
+  onModuleInit(): void {
+    if (this.config.NODE_ENV === 'test') return;
+
+    // `unref` so a pending timer cannot hold the process open on shutdown —
+    // without it, a container stop waits out the full interval.
+    this.timer = setInterval(() => void this.sweep(), SWEEP_INTERVAL_MS);
+    this.timer.unref();
+  }
+
+  onModuleDestroy(): void {
+    if (this.timer !== undefined) clearInterval(this.timer);
+  }
+
+  /**
+   * One pass. Public so a test can drive it directly rather than waiting on a
+   * timer, and so an operator can trigger it from a REPL during an incident.
+   *
+   * Failures are logged and swallowed: an unhandled rejection in a timer
+   * callback takes the process down, and a missed sweep is a far smaller
+   * problem than an API that restarts every fifteen minutes.
+   */
+  async sweep(): Promise<{ released: number; reminded: number }> {
+    if (this.running) return { released: 0, reminded: 0 };
+    this.running = true;
+    try {
+      return await runWithContext(systemContext('scheduling-sweep'), async () => {
+        const released = await this.scheduling.releaseExpiredAuthorisations();
+        const reminded = await this.scheduling.sendDueReminders(REMINDER_LEAD_HOURS);
+        if (released > 0 || reminded > 0) {
+          this.logger.log(`sweep: released ${released}, reminded ${reminded}`);
+        }
+        return { released, reminded };
+      });
+    } catch (err) {
+      this.logger.error(`sweep failed: ${err instanceof Error ? err.message : String(err)}`);
+      return { released: 0, reminded: 0 };
+    } finally {
+      this.running = false;
+    }
+  }
+}

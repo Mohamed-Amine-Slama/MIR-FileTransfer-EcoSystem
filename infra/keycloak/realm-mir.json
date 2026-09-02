@@ -49,6 +49,11 @@
         "composite": false
       },
       {
+        "name": "assistant",
+        "description": "Practice assistant. Manages a seated doctor's calendar. No imaging, no consent, no demographics. MFA required.",
+        "composite": false
+      },
+      {
         "name": "admin",
         "description": "Platform admin. Doctor verification and support. NO routine access to patient images (BUILD_SPEC §1.1). MFA required.",
         "composite": false

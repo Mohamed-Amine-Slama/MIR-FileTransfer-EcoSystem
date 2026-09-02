@@ -87,6 +87,19 @@ const nextConfig = {
    * resolved config into the standalone output. Repointing this means a
    * rebuild, not a restart.
    */
+  async redirects() {
+    // /doctor/availability was the receiving doctor's whole scheduling screen
+    // before /schedule absorbed it. Anything already linking to it — a
+    // bookmark, an onboarding email — should land on the tab that replaced it
+    // rather than a page with no way back into the workspace.
+    //
+    // Permanent: the old route is not coming back, and a 308 lets browsers and
+    // proxies stop asking.
+    return [
+      { source: '/doctor/availability', destination: '/schedule/availability', permanent: true },
+    ];
+  },
+
   async rewrites() {
     const apiOrigin = process.env['API_ORIGIN'];
     if (apiOrigin === undefined || apiOrigin === '') return [];

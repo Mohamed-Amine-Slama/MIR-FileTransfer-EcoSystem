@@ -6,6 +6,7 @@ import {
   Banknote,
   Briefcase,
   Building2,
+  CalendarClock,
   CalendarDays,
   FolderKanban,
   Inbox,
@@ -19,12 +20,12 @@ import type { Role } from '@mir/contracts';
 import { api, type Appointment, type AuditEvent } from '../lib/api/endpoints';
 import { useDateFormat, useT } from '../lib/i18n/provider';
 import type { Dictionary } from '../lib/i18n/dictionary';
-import { sideForRole } from '../lib/corridor/registry';
+import { PROVIDER_ROLES, sideForRole } from '../lib/corridor/registry';
 import { useSession } from '../lib/session/session';
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge';
+import { isLiveAppointment } from '../lib/scheduling/status';
 import { Landing } from '../components/marketing/Landing';
 import {
-import { isLiveAppointment } from '../lib/scheduling/status';
   Card,
   EmptyState,
   PageHeader,
@@ -84,6 +85,7 @@ export default function Home(): React.JSX.Element {
             </Card>
           )}
 
+          {runsACalendar(role) && <TodayPanel />}
           {role === 'libya_doctor' && <LibyaDoctorDashboard />}
           {role === 'patient' && <PatientDashboard />}
           {role === 'tunisia_doctor' && <TunisiaDoctorDashboard />}
@@ -294,6 +296,87 @@ function TunisiaDoctorDashboard(): React.JSX.Element {
   );
 }
 
+/**
+ * Who sees a "today" panel: both corridor endpoints and a seated assistant.
+ *
+ * Not a corridor question — an assistant plays no side — so it is spelled out
+ * rather than asked of `rolesForSides`.
+ */
+function runsACalendar(role: Role | null): boolean {
+  return role !== null && (PROVIDER_ROLES.includes(role) || role === 'assistant');
+}
+
+/**
+ * Today, at the top of the dashboard.
+ *
+ * The first thing a practice wants on opening the app is who is coming in the
+ * next few hours — a question the stat tiles below cannot answer, because a
+ * count of confirmed appointments says nothing about when they are. It stays
+ * deliberately short and hands off to /schedule for the rest: two views of the
+ * same list competing to be the real one is how they drift apart.
+ */
+function TodayPanel(): React.JSX.Element {
+  const t = useT();
+  const formatDate = useDateFormat();
+  const [rows, setRows] = useState<Appointment[] | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+      try {
+        const { appointments } = await api.scheduling.listAppointments({
+          from: start.toISOString(),
+          to: end.toISOString(),
+        });
+        setRows(
+          appointments
+            .filter((a) => isLiveAppointment(a.status))
+            .sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
+        );
+      } catch {
+        setRows([]);
+      }
+    })();
+  }, []);
+
+  return (
+    <Card
+      title={t.scheduleAgendaTitle}
+      actions={
+        <Link href="/schedule" className="text-sm font-medium text-primary hover:underline">
+          {t.dashboardViewAll}
+        </Link>
+      }
+    >
+      {rows === null ? (
+        <Skeleton className="h-12 w-full max-w-sm" />
+      ) : rows.length === 0 ? (
+        <EmptyState testId="today-empty">{t.scheduleAgendaEmpty}</EmptyState>
+      ) : (
+        <ul className="divide-y" data-testid="today-panel">
+          {rows.slice(0, 5).map((a) => (
+            <li key={a.id} className="flex flex-wrap items-center gap-3 py-2">
+              <Link
+                href={`/appointments/${a.id}`}
+                className="font-medium tabular-nums hover:text-primary hover:underline"
+              >
+                {formatDate(a.startsAt)}
+              </Link>
+              <span className="text-sm text-muted-foreground">
+                {a.patientName ?? a.patientId}
+              </span>
+              <AppointmentStatusBadge status={a.status} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
 function AdminDashboard(): React.JSX.Element {
   const t = useT();
   const [events, setEvents] = useState<AuditEvent[] | null>(null);
@@ -332,6 +415,7 @@ type DestinationKey =
   | 'consents'
   | 'inbox'
   | 'availability'
+  | 'schedule'
   | 'audit'
   | 'workspace'
   | 'cases'
@@ -347,6 +431,7 @@ const DESTINATION_ICONS: Record<DestinationKey, typeof Users> = {
   consents: ShieldCheck,
   inbox: Inbox,
   availability: UserRoundPlus,
+  schedule: CalendarClock,
   audit: ScrollText,
   workspace: Briefcase,
   cases: FolderKanban,
@@ -403,6 +488,12 @@ function destinationsFor(role: Role): { key: DestinationKey; href: string }[] {
       ];
     case 'admin':
       return [{ key: 'audit', href: '/admin/audit' }];
+    case 'assistant':
+      // The assistant's whole job is the calendar, so it is their whole
+      // dashboard. Nothing else here is reachable for them: /patients and
+      // /upload are the referring side's, and the imaging screens are gated on
+      // a consent they do not hold.
+      return [{ key: 'schedule', href: '/schedule' }];
     case 'applicant':
       // An applicant has no destinations. Their whole screen is the
       // verification status, which the dashboard surfaces directly rather than
@@ -419,6 +510,7 @@ function label(key: DestinationKey, t: Dictionary): string {
     consents: t.navConsents,
     inbox: t.navInbox,
     availability: t.navAvailability,
+    schedule: t.navSchedule,
     workspace: t.navWorkspace,
     cases: t.navCases,
     ledger: t.navLedger,
@@ -438,6 +530,7 @@ function description(key: DestinationKey, t: Dictionary): string {
     consents: t.consentDescription,
     inbox: t.inboxTitle,
     availability: t.availabilityDescription,
+    schedule: t.scheduleDescription,
     audit: t.auditDescription,
     workspace: t.workspaceDescription,
     cases: t.casesDescription,

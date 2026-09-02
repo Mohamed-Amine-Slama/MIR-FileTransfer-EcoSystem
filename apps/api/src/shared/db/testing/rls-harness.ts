@@ -292,6 +292,9 @@ export async function truncateAll(owner: Pool): Promise<void> {
   await owner.query(`
     TRUNCATE
       audit_events,
+      identity_invitations,
+      identity_memberships,
+      identity_organisations,
       scheduling_appointment_studies,
       scheduling_appointments,
       scheduling_availability,
@@ -415,4 +418,50 @@ export async function grantConsent(
 
 export async function revokeConsent(owner: Pool, consentId: string): Promise<void> {
   await owner.query(`UPDATE consent_records SET revoked_at = now() WHERE id = $1`, [consentId]);
+}
+
+/**
+ * A practice: one organisation, its doctor, and an assistant seated in it.
+ *
+ * The organisation must be `approved` — `identity_grant_assistant_role` refuses
+ * a pending one, exactly as the clinical grant does, so a fixture that skipped
+ * this would be testing a path production cannot reach.
+ */
+export async function createPractice(
+  owner: Pool,
+  doctorRole: Role = 'tunisia_doctor',
+): Promise<{ orgId: string; doctorId: string; assistantId: string }> {
+  const n = uniq();
+  const doctorId = await createUser(owner, doctorRole);
+  const assistantId = await createUser(owner, 'assistant');
+
+  const org = await owner.query<{ id: string }>(
+    `INSERT INTO identity_organisations
+       (kind, legal_name, corridor_id, side, verification_status, decided_at)
+     VALUES ('clinic', $1, 'ly-tn', $2, 'approved', now()) RETURNING id`,
+    [`Clinic ${n}`, doctorRole === 'libya_doctor' ? 'source' : 'destination'],
+  );
+  const orgId = org.rows[0]?.id;
+  if (orgId === undefined) throw new Error('createPractice returned no organisation');
+
+  await owner.query(
+    `INSERT INTO identity_memberships (organisation_id, user_id, seat_role)
+     VALUES ($1, $2, 'owner'), ($1, $3, 'assistant')`,
+    [orgId, doctorId, assistantId],
+  );
+
+  return { orgId, doctorId, assistantId };
+}
+
+/** Seat an existing user in an organisation. */
+export async function seatMember(
+  owner: Pool,
+  orgId: string,
+  userId: string,
+  seatRole: 'owner' | 'member' | 'assistant' = 'member',
+): Promise<void> {
+  await owner.query(
+    `INSERT INTO identity_memberships (organisation_id, user_id, seat_role) VALUES ($1, $2, $3)`,
+    [orgId, userId, seatRole],
+  );
 }
